@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>AYDIN CİNEMA | Premium v4.0</title>
+    <link rel="icon" type="image/png" href="logo.png">
+
+    <!-- ===== PWA (iPhone Ana Ekrana Ekleme) ===== -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Aydın Cinema">
+    <meta name="theme-color" content="#0a0b13">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --void: #0a0b13;
+            --void-2: #12141f;
+            --panel: #171a27;
+            --panel-raised: #1e2233;
+            --line: #2a2e42;
+            --marquee: #ffb703;
+            --marquee-dim: #a67a1f;
+            --hot: #ff5d5d;
+            --ink: #f4f0e6;
+            --dim: #9296ac;
+            --mono: 'JetBrains Mono', monospace;
+        }
+        * { box-sizing: border-box; }
+        html { -webkit-text-size-adjust: 100%; overflow-x: hidden; width: 100%; }
+        body {
+            background: var(--void);
+            background-image:
+                radial-gradient(ellipse 900px 500px at 50% -10%, rgba(255, 183, 3, 0.10), transparent 60%),
+                radial-gradient(ellipse 700px 400px at 90% 10%, rgba(255, 93, 93, 0.06), transparent 60%);
+            color: var(--ink);
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: max(32px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(40px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+            display: flex; flex-direction: column; align-items: center; min-height: 100vh;
+            overflow-x: hidden; width: 100%; max-width: 100vw;
+        }
+        input, select, button { max-width: 100%; }
+
+        /* ===== MARQUEE HEADER ===== */
+        .header { text-align: center; margin-bottom: 34px; width: 100%; max-width: 1000px; }
+        .marquee-lights {
+            display: flex; justify-content: center; gap: 10px; margin-bottom: 4px;
+        }
+        .marquee-lights span {
+            width: 7px; height: 7px; border-radius: 50%;
+            background: var(--marquee);
+            box-shadow: 0 0 8px 2px rgba(255, 183, 3, 0.7);
+            animation: bulb-flicker 2.6s ease-in-out infinite;
+        }
+        .marquee-lights span:nth-child(2n) { animation-delay: 0.35s; }
+        .marquee-lights span:nth-child(3n) { animation-delay: 0.7s; }
+        .marquee-lights span:nth-child(5n) { animation-delay: 1.1s; }
+        @keyframes bulb-flicker {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.35; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .marquee-lights span { animation: none; }
+        }
+        .brand-container { display: flex; align-items: center; justify-content: center; gap: 18px; margin: 10px 0 6px; }
+        .main-logo { width: 56px; height: 56px; filter: drop-shadow(0 0 12px rgba(255, 183, 3, 0.45)); border-radius: 10px; }
+        .header h1 {
+            font-family: 'Anton', sans-serif; font-weight: 400;
+            font-size: clamp(2.1rem, 7vw, 4.2rem);
+            letter-spacing: 0.04em;
+            color: var(--ink);
+            text-transform: uppercase; margin: 0;
+            text-shadow: 0 0 24px rgba(255, 183, 3, 0.25), 0 2px 0 rgba(0,0,0,0.6);
+        }
+        .header .eyebrow {
+            font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.3em;
+            color: var(--marquee); text-transform: uppercase; margin: 0 0 2px;
+        }
+        .header .tagline { color: var(--dim); font-size: 0.85rem; margin: 4px 0 0; letter-spacing: 0.02em; }
+
+        /* ===== FORM PANEL (BOX-OFFICE) ===== */
+        .panel {
+            background: linear-gradient(180deg, var(--panel), var(--panel-raised));
+            padding: 22px; border-radius: 16px;
+            border: 1px solid var(--line); border-top: 3px solid var(--marquee);
+            display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; align-items: center;
+            width: 100%; max-width: 1000px; margin-bottom: 26px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+        }
+        input, select {
+            padding: 13px 14px; border-radius: 8px; border: 1px solid var(--line);
+            background: var(--void-2); color: var(--ink); outline: none;
+            font-family: 'Inter', sans-serif; font-size: 16px;
+            min-height: 46px; transition: border-color 0.15s;
+        }
+        input:focus, select:focus { border-color: var(--marquee); }
+        input::placeholder { color: #5b5f74; }
+        .tv-controls { display: none; gap: 10px; align-items: center; color: var(--dim); font-size: 0.85rem; }
+        .tv-controls input { width: 60px !important; text-align: center; }
+
+        button {
+            padding: 13px 26px; min-height: 46px;
+            background: var(--marquee); color: #14110a; border: none; border-radius: 8px;
+            font-weight: 700; font-size: 0.9rem; cursor: pointer; text-transform: uppercase;
+            letter-spacing: 0.03em;
+            transition: transform 0.15s, background 0.15s, box-shadow 0.15s;
+        }
+        button:hover { background: #ffc63d; box-shadow: 0 6px 18px rgba(255, 183, 3, 0.3); }
+        button:active { transform: scale(0.97); background: #e6a300; }
+
+        /* ===== PLAYER ===== */
+        .player-box {
+            width: 100%; max-width: 1100px; aspect-ratio: 16/9; background: #000;
+            border-radius: 14px; overflow: hidden; border: 1px solid var(--line);
+            box-shadow: 0 25px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,183,3,0.05);
+            margin-bottom: 36px; position: relative;
+        }
+        iframe { width: 100%; height: 100%; border: none; }
+
+        /* ===== HISTORY: TICKET STUBS ===== */
+        .history-container {
+            width: 100%; max-width: 1000px; background: var(--panel);
+            padding: 22px; border-radius: 16px; border: 1px solid var(--line);
+        }
+        .history-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; border-bottom: 1px dashed var(--line); margin-bottom: 16px; padding-bottom: 12px; }
+        .history-header h2 {
+            margin: 0; font-family: 'Anton', sans-serif; font-weight: 400; font-size: 1.15rem;
+            letter-spacing: 0.03em; color: var(--marquee); text-transform: uppercase;
+            display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0;
+        }
+        .clear-btn {
+            background: none; border: 1px solid var(--line); color: var(--dim);
+            font-size: 0.7rem; padding: 8px 12px; min-height: 36px; font-weight: 600;
+        }
+        .clear-btn:hover { background: var(--panel-raised); color: var(--ink); }
+        .clear-btn:active { transform: scale(0.97); }
+
+        .history-list { list-style: none; padding: 0; margin: 0; max-height: 420px; overflow-y: auto; }
+        .history-item {
+            background: var(--void-2);
+            border: 1px solid var(--line); border-left: 3px solid transparent;
+            padding: 14px 16px; border-radius: 10px; margin-bottom: 10px;
+            display: flex; justify-content: space-between; align-items: center;
+            gap: 10px; cursor: pointer; transition: 0.15s;
+            position: relative;
+        }
+        /* ticket perforation notch */
+        .history-item::before, .history-item::after {
+            content: ""; position: absolute; width: 12px; height: 12px;
+            background: var(--panel); border-radius: 50%; top: 50%; transform: translateY(-50%);
+        }
+        .history-item::before { left: -7px; }
+        .history-item::after { right: -7px; }
+        .history-item:hover, .history-item:active { border-left-color: var(--marquee); background: var(--panel-raised); }
+        .history-item-left { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; }
+        .history-poster {
+            width: 38px; height: 54px; object-fit: cover; border-radius: 6px;
+            background: var(--panel-raised); flex-shrink: 0; border: 1px solid var(--line);
+        }
+        .history-poster-placeholder {
+            width: 38px; height: 54px; border-radius: 6px; background: var(--panel-raised);
+            flex-shrink: 0; border: 1px solid var(--line); display: flex; align-items: center;
+            justify-content: center; font-size: 1rem; color: var(--dim);
+        }
+        .history-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+        .history-title { font-weight: 700; color: var(--ink); font-size: 0.95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .history-meta { font-size: 0.75rem; color: var(--dim); }
+
+        .history-group { margin-bottom: 8px; }
+        .expand-arrow { font-size: 0.7rem; color: var(--dim); margin-left: 10px; transition: transform 0.2s; display: inline-block; }
+        .expand-arrow.open { transform: rotate(180deg); color: var(--marquee); }
+
+        .episode-list { list-style: none; padding: 0; margin: 8px 0 0 0; display: none; }
+        .episode-list.open { display: block; }
+        .episode-item {
+            background: var(--void-2); padding: 12px 15px; border-radius: 8px; margin: 8px 0 0 18px;
+            display: flex; justify-content: space-between; align-items: center; cursor: pointer;
+            font-size: 0.85rem; border-left: 3px solid var(--line); transition: 0.15s;
+            min-height: 44px;
+        }
+        .episode-item:hover, .episode-item:active { background: var(--panel-raised); border-left-color: var(--hot); }
+        .episode-item .ep-label { color: #ddd; }
+        .episode-item .ep-date { color: var(--dim); font-size: 0.7rem; font-family: var(--mono); }
+
+        /* ===== TWO-COLUMN LAYOUT ===== */
+        .main-layout {
+            width: 100%; max-width: 1400px;
+            display: flex; gap: 26px; align-items: flex-start; justify-content: center; flex-wrap: wrap;
+        }
+        .main-content { flex: 1 1 600px; max-width: 1100px; min-width: 0; display: flex; flex-direction: column; align-items: center; order: 2; }
+        .main-content > * { width: 100%; }
+
+        .sidebar { flex: 0 1 340px; min-width: 280px; order: 1; }
+
+        @media (max-width: 1000px) {
+            .sidebar { flex-basis: 100%; min-width: 0; width: 100%; }
+            .search-panel { position: static; }
+            .history-item::before, .history-item::after { display: none; }
+        }
+        .search-panel {
+            background: var(--panel); border-radius: 16px; border: 1px solid var(--line); border-top: 3px solid var(--hot);
+            padding: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.5); position: sticky; top: 20px;
+        }
+        .search-panel h2 {
+            margin: 0 0 15px 0; font-family: 'Anton', sans-serif; font-weight: 400;
+            font-size: 1.05rem; letter-spacing: 0.03em; color: var(--hot); text-transform: uppercase; text-align: center;
+        }
+        .search-panel input { width: 100%; margin-bottom: 10px; }
+
+        .imdb-results { max-height: 400px; overflow-y: auto; }
+        .imdb-result-item {
+            display: flex; gap: 10px; align-items: center; background: var(--void-2); border-radius: 10px;
+            padding: 10px; margin-bottom: 10px; border: 1px solid var(--line); transition: 0.15s;
+        }
+        .imdb-result-item:hover { background: var(--panel-raised); }
+        .imdb-result-item img { width: 40px; height: 56px; object-fit: cover; border-radius: 4px; background: var(--panel-raised); flex-shrink: 0; }
+        .imdb-result-info { flex: 1; min-width: 0; }
+        .imdb-result-title { font-size: 0.85rem; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .imdb-result-meta { font-size: 0.7rem; color: var(--dim); }
+        .imdb-result-id { font-size: 0.7rem; color: var(--marquee); font-family: var(--mono); }
+        .imdb-result-actions { display: flex; flex-direction: column; gap: 6px; }
+        .imdb-mini-btn {
+            padding: 8px 10px; font-size: 0.65rem; border-radius: 6px; text-transform: none;
+            background: var(--panel-raised); color: var(--ink); white-space: nowrap; min-height: 32px; font-weight: 600;
+        }
+        .imdb-mini-btn:hover { background: var(--marquee); color: #14110a; transform: none; }
+        .imdb-mini-btn.copied { background: #2e7d32 !important; color: #fff !important; }
+
+        .search-status { color: var(--dim); font-size: 0.8rem; text-align: center; padding: 10px 0; }
+        .search-status a { color: var(--marquee); }
+
+        .divider { text-align: center; color: #4a4e63; font-size: 0.7rem; margin: 16px 0; text-transform: uppercase; letter-spacing: 0.15em; position: relative; }
+        .divider::before, .divider::after { content: ""; display: inline-block; width: 28%; height: 1px; background: var(--line); vertical-align: middle; margin: 0 8px; }
+
+        .sidebar-label { display: block; font-size: 0.7rem; color: var(--dim); margin-bottom: 6px; }
+        #urlExtractResult:not(:empty) {
+            background: var(--void-2); border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-top: 10px;
+            display: flex; justify-content: space-between; align-items: center; gap: 10px;
+        }
+
+        /* Larger tap targets on touch devices */
+        @media (hover: none) {
+            button, .imdb-mini-btn, .clear-btn { min-height: 44px; }
+            .history-item, .episode-item, .imdb-result-item { min-height: 44px; }
+        }
+
+        /* ===== HESAP PANELİ ===== */
+        .account-panel {
+            background: var(--panel); border-radius: 16px; border: 1px solid var(--line); border-top: 3px solid #4caf50;
+            padding: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.5); margin-bottom: 20px;
+            min-width: 0; max-width: 100%;
+        }
+        .account-panel h2 {
+            margin: 0 0 12px 0; font-family: 'Anton', sans-serif; font-weight: 400;
+            font-size: 1.05rem; letter-spacing: 0.03em; color: #4caf50; text-transform: uppercase; text-align: center;
+        }
+        .account-panel input { width: 100%; max-width: 100%; margin-bottom: 10px; }
+        .account-btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
+        .account-btn-row button { flex: 1 1 120px; min-width: 0; padding: 12px 10px; font-size: 0.8rem; }
+        .account-btn-secondary { background: var(--panel-raised); color: var(--ink); }
+        .account-btn-secondary:hover { background: var(--line); }
+        .account-status {
+            display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;
+            background: var(--void-2); border: 1px solid var(--line); border-radius: 10px;
+            padding: 12px 14px; gap: 10px;
+        }
+        .account-status-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 140px; }
+        .account-status-email { font-size: 0.85rem; font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .account-status-label { font-size: 0.7rem; color: #4caf50; font-family: var(--mono); }
+        .account-logout-btn { padding: 8px 14px; font-size: 0.7rem; min-height: 36px; background: var(--panel-raised); color: var(--ink); white-space: nowrap; flex-shrink: 0; }
+        .account-logout-btn:hover { background: var(--hot); color: #fff; }
+        .account-error { color: var(--hot); font-size: 0.75rem; text-align: center; padding: 6px 0 0; }
+        .account-toggle-mode { text-align: center; font-size: 0.75rem; color: var(--dim); margin-top: 4px; }
+        .account-toggle-mode a { color: var(--marquee); cursor: pointer; }
+        .sync-badge {
+            font-size: 0.65rem; font-family: var(--mono); padding: 2px 8px; border-radius: 20px;
+            display: inline-flex; align-items: center; gap: 4px;
+        }
+        .sync-badge.on { background: rgba(76, 175, 80, 0.15); color: #4caf50; }
+        .sync-badge.off { background: rgba(146, 150, 172, 0.15); color: var(--dim); }
+
+        /* Çok dar ekranlar (ör. küçük telefonlar) için ek güvenlik */
+        @media (max-width: 400px) {
+            body { padding-left: max(10px, env(safe-area-inset-left)); padding-right: max(10px, env(safe-area-inset-right)); }
+            .panel, .search-panel, .account-panel, .history-container { padding: 16px; }
+            .account-btn-row button { flex-basis: 100%; }
+            .history-header h2 { font-size: 1rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ================= FIREBASE (Hesap + Bulut Senkronizasyonu) =================
+         AŞAĞIYA KENDİ FIREBASE PROJENİN "firebaseConfig" BİLGİLERİNİ YAPIŞTIR.
+         Firebase Console > Proje Ayarları > Genel > "Web uygulamaların" bölümünden alınır.
+    -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import {
+            getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+            signOut, onAuthStateChanged
+        } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import {
+            getFirestore, doc, getDoc, setDoc
+        } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+        // ↓↓↓ BURAYI KENDİ FIREBASE CONFIG'İNLE DEĞİŞTİR ↓↓↓
+        const firebaseConfig = {
+            apiKey: "AIzaSyDjuKtPKa5btEeI4rmcEG45HEZNjULMYFY",
+            authDomain: "aydincinema-28918.firebaseapp.com",
+            projectId: "aydincinema-28918",
+            storageBucket: "aydincinema-28918.firebasestorage.app",
+            messagingSenderId: "567994850263",
+            appId: "1:567994850263:web:25e5fdca48d8f2691c0992"
+        };
+        // ↑↑↑ BURAYI KENDİ FIREBASE CONFIG'İNLE DEĞİŞTİR ↑↑↑
+
+        let app = null, auth = null, db = null, firebaseReady = false;
+        try {
+            if (!firebaseConfig.apiKey.startsWith("BURAYA_")) {
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                firebaseReady = true;
+            }
+        } catch (e) {
+            console.error("Firebase başlatılamadı:", e);
+        }
+
+        // Ana (non-module) script'in kullanabilmesi için köprü fonksiyonlar window'a bağlanıyor.
+        window.firebaseBridge = {
+            ready: firebaseReady,
+
+            register: async (email, password) => {
+                const cred = await createUserWithEmailAndPassword(auth, email, password);
+                return cred.user;
+            },
+            login: async (email, password) => {
+                const cred = await signInWithEmailAndPassword(auth, email, password);
+                return cred.user;
+            },
+            logout: async () => signOut(auth),
+
+            // Kullanıcının Firestore'daki geçmiş verisini okur. Yoksa null döner.
+            loadHistory: async (uid) => {
+                const snap = await getDoc(doc(db, "users", uid));
+                if (snap.exists() && Array.isArray(snap.data().history)) return snap.data().history;
+                return null;
+            },
+            // Kullanıcının Firestore'daki geçmiş verisini yazar.
+            saveHistory: async (uid, historyArray) => {
+                await setDoc(doc(db, "users", uid), { history: historyArray }, { merge: true });
+            },
+
+            // Oturum durumu değiştiğinde (giriş/çıkış/sayfa yenileme) çalışacak callback'i kaydeder.
+            onAuthChange: (callback) => {
+                if (!firebaseReady) { callback(null); return; }
+                onAuthStateChanged(auth, (user) => callback(user));
+            }
+        };
+
+        if (!firebaseReady) {
+            // Config henüz doldurulmadıysa ana script yine de çalışsın, sadece bulut senkronu pasif kalsın.
+            window.dispatchEvent(new Event('firebaseBridgeReady'));
+        } else {
+            window.dispatchEvent(new Event('firebaseBridgeReady'));
+        }
+    </script>
+
+    <div class="header">
+        <div class="marquee-lights">
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span>
+        </div>
+        <p class="eyebrow">Gişe Açık · 24 Saat</p>
+        <div class="brand-container">
+            <img src="logo.png" alt="Logo" class="main-logo">
+            <h1>Aydın Cİnema</h1>
+        </div>
+        <p class="tagline">Premium Access</p>
+    </div>
+
+    <div class="main-layout">
+        <div class="main-content">
+            <div class="panel">
+                <input type="text" id="mName" placeholder="İçerik Adı (Örn: Batman)" style="width: 200px;" oninput="document.getElementById('mPoster').value='';">
+
+                <select id="mType" onchange="updateUI()">
+                    <option value="movie">FİLM</option>
+                    <option value="tv">DİZİ</option>
+                </select>
+
+                <input type="text" id="mId" placeholder="IMDb ID (tt...)" style="width: 150px;" oninput="document.getElementById('mPoster').value='';">
+                <input type="hidden" id="mPoster" value="">
+
+                <div id="tvFields" class="tv-controls">
+                    <span>S:</span><input type="number" id="season" value="1" min="1">
+                    <span>E:</span><input type="number" id="episode" value="1" min="1">
+                </div>
+
+                <button onclick="loadMedia()">İzle</button>
+            </div>
+
+            <div class="player-box">
+                <iframe id="cinemaFrame" src="about:blank" allowfullscreen
+                        allow="autoplay; encrypted-media">
+                </iframe>
+            </div>
+
+            <div class="history-container">
+                <div class="history-header">
+                    <h2>İzleme Geçmişi <span id="syncBadge" class="sync-badge off">● Yerel</span></h2>
+                    <button class="clear-btn" onclick="clearHistory()">Geçmişi Temizle</button>
+                </div>
+                <ul id="historyList" class="history-list">
+                    </ul>
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <div class="account-panel" id="accountPanel">
+                <!-- JS ile doldurulacak: giriş formu ya da giriş yapılmış durumu -->
+            </div>
+
+            <div class="search-panel">
+                <h2>🔍 IMDb Arama</h2>
+                <input type="text" id="imdbSearchInput" placeholder="Film veya dizi adı yazın..." oninput="onImdbSearchInput()">
+                <div id="apiKeyHint" class="search-status" style="text-align:left; padding:0 0 10px 0;"></div>
+                <div id="imdbResults" class="imdb-results"></div>
+
+                <div class="divider">veya</div>
+
+                <span class="sidebar-label">IMDb linkini yapıştır, ID'yi otomatik çıkar</span>
+                <input type="text" id="imdbUrlInput" placeholder="https://www.imdb.com/title/tt.../">
+                <button onclick="extractIdFromUrl()" style="width:100%;">ID Çıkar</button>
+                <div id="urlExtractResult"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /* ================= HESAP + BULUT SENKRONİZASYONU ================= */
+        let currentUser = null;
+        let cloudSyncBusy = false;
+
+        window.addEventListener('firebaseBridgeReady', initAccountSystem);
+        // Bridge script'i bu ana script'ten önce zaten yüklenip event'i tetiklemiş olabilir.
+        if (window.firebaseBridge) initAccountSystem();
+
+        function initAccountSystem() {
+            if (!window.firebaseBridge || !window.firebaseBridge.ready) {
+                renderAccountPanel(); // config girilmemiş, sadece bilgi mesajı göster
+                return;
+            }
+            window.firebaseBridge.onAuthChange(async (user) => {
+                currentUser = user;
+                renderAccountPanel();
+                updateSyncBadge();
+                if (user) {
+                    await pullHistoryFromCloud();
+                }
+            });
+        }
+
+        function updateSyncBadge() {
+            const badge = document.getElementById('syncBadge');
+            if (!badge) return;
+            if (currentUser) {
+                badge.textContent = '● Senkronize';
+                badge.className = 'sync-badge on';
+            } else {
+                badge.textContent = '● Yerel';
+                badge.className = 'sync-badge off';
+            }
+        }
+
+        function renderAccountPanel() {
+            const panel = document.getElementById('accountPanel');
+            if (!window.firebaseBridge || !window.firebaseBridge.ready) {
+                panel.innerHTML = `
+                    <h2>👤 Hesap</h2>
+                    <div class="search-status" style="padding:0;">
+                        Bulut senkronizasyonu henüz kurulmadı.<br>Firebase config bilgisi eklenmeli.
+                    </div>
+                `;
+                return;
+            }
+
+            if (currentUser) {
+                panel.innerHTML = `
+                    <h2>👤 Hesap</h2>
+                    <div class="account-status">
+                        <div class="account-status-info">
+                            <span class="account-status-email">${escapeHtml(currentUser.email)}</span>
+                            <span class="account-status-label">Cihazlar arası senkron aktif</span>
+                        </div>
+                        <button class="account-logout-btn" id="logoutBtn">Çıkış</button>
+                    </div>
+                `;
+                document.getElementById('logoutBtn').onclick = handleLogout;
+            } else {
+                panel.innerHTML = `
+                    <h2>👤 Hesap</h2>
+                    <input type="email" id="authEmail" placeholder="E-posta">
+                    <input type="password" id="authPassword" placeholder="Şifre (en az 6 karakter)">
+                    <div class="account-btn-row">
+                        <button id="loginBtn">Giriş Yap</button>
+                        <button id="registerBtn" class="account-btn-secondary">Kayıt Ol</button>
+                    </div>
+                    <div id="authError" class="account-error"></div>
+                `;
+                document.getElementById('loginBtn').onclick = () => handleAuth('login');
+                document.getElementById('registerBtn').onclick = () => handleAuth('register');
+                document.getElementById('authPassword').addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') handleAuth('login');
+                });
+            }
+        }
+
+        async function handleAuth(mode) {
+            const email = document.getElementById('authEmail').value.trim();
+            const password = document.getElementById('authPassword').value;
+            const errorBox = document.getElementById('authError');
+            errorBox.textContent = '';
+
+            if (!email || !password) {
+                errorBox.textContent = 'E-posta ve şifre gerekli.';
+                return;
+            }
+
+            try {
+                if (mode === 'register') {
+                    await window.firebaseBridge.register(email, password);
+                } else {
+                    await window.firebaseBridge.login(email, password);
+                }
+                // onAuthChange dinleyicisi otomatik tetiklenip paneli güncelleyecek
+            } catch (err) {
+                errorBox.textContent = translateFirebaseError(err.code || err.message);
+            }
+        }
+
+        function translateFirebaseError(code) {
+            const map = {
+                'auth/email-already-in-use': 'Bu e-posta zaten kayıtlı, Giriş Yap\'ı dene.',
+                'auth/invalid-email': 'Geçersiz e-posta adresi.',
+                'auth/weak-password': 'Şifre en az 6 karakter olmalı.',
+                'auth/wrong-password': 'Şifre hatalı.',
+                'auth/user-not-found': 'Bu e-posta ile kayıtlı hesap bulunamadı.',
+                'auth/invalid-credential': 'E-posta veya şifre hatalı.',
+                'auth/too-many-requests': 'Çok fazla deneme yapıldı, biraz bekleyin.'
+            };
+            return map[code] || 'Bir hata oluştu, tekrar deneyin.';
+        }
+
+        async function handleLogout() {
+            try {
+                await window.firebaseBridge.logout();
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        // Girişten hemen sonra çalışır: buluttaki geçmiş varsa onu esas alır,
+        // yoksa (ilk senkron) mevcut yerel geçmişi buluta yükler.
+        async function pullHistoryFromCloud() {
+            if (!currentUser) return;
+            try {
+                const cloudHistory = await window.firebaseBridge.loadHistory(currentUser.uid);
+                if (cloudHistory) {
+                    localStorage.setItem('cinemaHistory', JSON.stringify(cloudHistory));
+                    renderHistory();
+                } else {
+                    // Bulutta hiç kayıt yok, yerelde varsa ilk kez buluta gönder
+                    const localHistory = JSON.parse(localStorage.getItem('cinemaHistory')) || [];
+                    if (localHistory.length > 0) {
+                        await window.firebaseBridge.saveHistory(currentUser.uid, localHistory);
+                    }
+                }
+            } catch (err) {
+                console.error('Bulut geçmişi alınamadı:', err);
+            }
+        }
+
+        // Yerel geçmiş her değiştiğinde (izleme, silme) giriş yapılmışsa buluta da yazar.
+        async function syncHistoryToCloud() {
+            if (!currentUser || !window.firebaseBridge || cloudSyncBusy) return;
+            cloudSyncBusy = true;
+            try {
+                const localHistory = JSON.parse(localStorage.getItem('cinemaHistory')) || [];
+                await window.firebaseBridge.saveHistory(currentUser.uid, localHistory);
+            } catch (err) {
+                console.error('Bulut senkronizasyonu başarısız:', err);
+            } finally {
+                cloudSyncBusy = false;
+            }
+        }
+
+        window.onload = function() {
+            renderHistory();
+            setupApiKeyHint();
+            renderAccountPanel();
+        };
+
+        function updateUI() {
+            const type = document.getElementById('mType').value;
+            document.getElementById('tvFields').style.display = (type === 'tv') ? 'flex' : 'none';
+        }
+
+        async function loadMedia() {
+            const name = document.getElementById('mName').value.trim() || "İsimsiz İçerik";
+            const type = document.getElementById('mType').value;
+            const id = document.getElementById('mId').value.trim();
+            const s = document.getElementById('season').value;
+            const e = document.getElementById('episode').value;
+            const player = document.getElementById('cinemaFrame');
+
+            if (!id) { alert("Lütfen IMDb ID girin."); return; }
+
+            // Oynatmayı hemen başlat, poster çözümlemesi izlemeyi bekletmesin
+            let finalUrl = "";
+            if (type === 'movie') {
+                finalUrl = `https://vaplayer.ru/embed/movie/${id}`;
+            } else {
+                let sPad = s.padStart(2, '0'), ePad = e.padStart(2, '0');
+                finalUrl = `https://vaplayer.ru/embed/tv/${id}/S${sPad}E${ePad}`;
+            }
+            player.src = finalUrl + "?primaryColor=%23ffb703";
+
+            let poster = document.getElementById('mPoster').value || '';
+            if (!poster) {
+                poster = await fetchPosterForId(id);
+                document.getElementById('mPoster').value = poster;
+            }
+
+            saveToHistory({ name, type, id, s, e, date: new Date().toLocaleString('tr-TR'), poster });
+        }
+
+        // Varsayılan olarak gömülü OMDb API anahtarı. Kullanıcı kendi anahtarını girerse
+        // (localStorage'a kaydedilir) o öncelikli olur; girmezse bu varsayılan kullanılır.
+        const DEFAULT_OMDB_KEY = '7c2550ff';
+        function getOmdbApiKey() {
+            return localStorage.getItem('omdbApiKey') || DEFAULT_OMDB_KEY;
+        }
+
+        // IMDb ID'sinden kapak resmi (poster) çözer: önce OMDb'yi dener, olmazsa IMDb'nin
+        // öneri servisini (proxy zinciriyle) dener. Bulamazsa boş döner (placeholder gösterilir).
+        async function fetchPosterForId(id) {
+            const apiKey = getOmdbApiKey();
+            try {
+                const res = await fetch(`https://www.omdbapi.com/?apikey=${encodeURIComponent(apiKey)}&i=${encodeURIComponent(id)}`);
+                const data = await res.json();
+                if (data && data.Poster && data.Poster !== 'N/A') return data.Poster;
+            } catch (e) { /* yavaş moda düş */ }
+            try {
+                const text = await proxyFetchText(`https://v2.sg.media-imdb.com/suggestion/t/${encodeURIComponent(id)}.json`);
+                const data = JSON.parse(text);
+                const match = (data.d || []).find(x => x.id === id);
+                if (match && match.i && match.i.imageUrl) return match.i.imageUrl;
+            } catch (e) { /* poster bulunamadı */ }
+            return '';
+        }
+
+        function saveToHistory(item) {
+            let history = JSON.parse(localStorage.getItem('cinemaHistory')) || [];
+            const existingIndex = history.findIndex(h => h.id === item.id && h.type === item.type);
+
+            if (item.type === 'tv') {
+                if (existingIndex !== -1) {
+                    const group = history[existingIndex];
+                    group.episodes = (group.episodes || []).filter(ep => !(ep.s === item.s && ep.e === item.e));
+                    group.episodes.unshift({ s: item.s, e: item.e, date: item.date });
+                    group.s = item.s;
+                    group.e = item.e;
+                    group.date = item.date;
+                    group.name = item.name;
+                    if (item.poster) group.poster = item.poster;
+                    history.splice(existingIndex, 1);
+                    history.unshift(group);
+                } else {
+                    history.unshift({
+                        name: item.name, type: item.type, id: item.id,
+                        s: item.s, e: item.e, date: item.date, poster: item.poster || '',
+                        episodes: [{ s: item.s, e: item.e, date: item.date }]
+                    });
+                }
+            } else {
+                if (existingIndex !== -1) history.splice(existingIndex, 1);
+                history.unshift({ name: item.name, type: item.type, id: item.id, date: item.date, poster: item.poster || '' });
+            }
+
+            localStorage.setItem('cinemaHistory', JSON.stringify(history.slice(0, 20)));
+            renderHistory();
+            syncHistoryToCloud();
+        }
+
+        function renderHistory() {
+            const history = JSON.parse(localStorage.getItem('cinemaHistory')) || [];
+            const list = document.getElementById('historyList');
+            list.innerHTML = history.length ? "" : "<li style='color:#666; text-align:center; padding:20px;'>Henüz bir şey izlemediniz.</li>";
+
+            history.forEach((item, groupIdx) => {
+                const li = document.createElement('li');
+                li.className = 'history-group';
+
+                if (item.type === 'tv') {
+                    const subText = `Dizi - Son: Sezon ${item.s}, Bölüm ${item.e}`;
+                    const epCount = (item.episodes || []).length;
+                    const posterHtml = item.poster
+                        ? `<img class="history-poster" src="${item.poster}" alt="">`
+                        : `<div class="history-poster-placeholder">🎬</div>`;
+                    li.innerHTML = `
+                        <div class="history-item" data-group="${groupIdx}">
+                            <div class="history-item-left">
+                                ${posterHtml}
+                                <div class="history-info">
+                                    <span class="history-title">${item.name}</span>
+                                    <span class="history-meta">${subText} • ${epCount} bölüm izlendi</span>
+                                </div>
+                            </div>
+                            <span style="display:flex; align-items:center; gap:8px;">
+                                <span style="color:var(--marquee); font-size:0.8rem; font-family:var(--mono);">${item.id}</span>
+                                <span class="expand-arrow">▼</span>
+                            </span>
+                        </div>
+                        <ul class="episode-list"></ul>
+                    `;
+
+                    const headerDiv = li.querySelector('.history-item');
+                    const arrow = li.querySelector('.expand-arrow');
+                    const epList = li.querySelector('.episode-list');
+
+                    (item.episodes || []).forEach(ep => {
+                        const epLi = document.createElement('li');
+                        epLi.className = 'episode-item';
+                        epLi.innerHTML = `
+                            <span class="ep-label">Sezon ${ep.s}, Bölüm ${ep.e}</span>
+                            <span class="ep-date">${ep.date}</span>
+                        `;
+                        epLi.onclick = (evt) => {
+                            evt.stopPropagation();
+                            document.getElementById('mName').value = item.name;
+                            document.getElementById('mType').value = 'tv';
+                            document.getElementById('mId').value = item.id;
+                            document.getElementById('mPoster').value = item.poster || '';
+                            document.getElementById('season').value = ep.s;
+                            document.getElementById('episode').value = ep.e;
+                            updateUI();
+                            loadMedia();
+                        };
+                        epList.appendChild(epLi);
+                    });
+
+                    headerDiv.onclick = () => {
+                        epList.classList.toggle('open');
+                        arrow.classList.toggle('open');
+                    };
+                } else {
+                    const posterHtml = item.poster
+                        ? `<img class="history-poster" src="${item.poster}" alt="">`
+                        : `<div class="history-poster-placeholder">🎬</div>`;
+                    li.innerHTML = `
+                        <div class="history-item">
+                            <div class="history-item-left">
+                                ${posterHtml}
+                                <div class="history-info">
+                                    <span class="history-title">${item.name}</span>
+                                    <span class="history-meta">Film • ${item.date}</span>
+                                </div>
+                            </div>
+                            <span style="color:var(--marquee); font-size:0.8rem; font-family:var(--mono);">${item.id}</span>
+                        </div>
+                    `;
+                    li.querySelector('.history-item').onclick = () => {
+                        document.getElementById('mName').value = item.name;
+                        document.getElementById('mType').value = item.type;
+                        document.getElementById('mId').value = item.id;
+                        document.getElementById('mPoster').value = item.poster || '';
+                        updateUI();
+                        loadMedia();
+                    };
+                }
+
+                list.appendChild(li);
+            });
+        }
+
+        function clearHistory() {
+            if(confirm("Tüm izleme geçmişi silinecek. Emin misiniz?")) {
+                localStorage.removeItem('cinemaHistory');
+                renderHistory();
+                syncHistoryToCloud();
+            }
+        }
+
+        /* ================= IMDb ARAMA ================= */
+        let imdbSearchTimeout = null;
+        let imdbSearchSeq = 0;
+
+        function onImdbSearchInput() {
+            clearTimeout(imdbSearchTimeout);
+            const query = document.getElementById('imdbSearchInput').value.trim();
+            const resultsBox = document.getElementById('imdbResults');
+
+            if (query.length < 2) {
+                resultsBox.innerHTML = "";
+                return;
+            }
+            resultsBox.innerHTML = `<div class="search-status">Aranıyor...</div>`;
+            imdbSearchTimeout = setTimeout(() => performImdbSearch(query), 250);
+        }
+
+        function setupApiKeyHint() {
+            const hint = document.getElementById('apiKeyHint');
+            const custom = localStorage.getItem('omdbApiKey');
+            if (custom) {
+                hint.innerHTML = `⚡ Hızlı mod aktif (özel anahtar) · <a href="#" id="changeKeyLink">anahtarı değiştir</a>`;
+            } else {
+                hint.innerHTML = `⚡ Hızlı mod aktif · <a href="#" id="changeKeyLink">anahtarı değiştir</a>`;
+            }
+            document.getElementById('changeKeyLink').onclick = (e) => { e.preventDefault(); promptForApiKey(); };
+        }
+
+        function promptForApiKey() {
+            const current = localStorage.getItem('omdbApiKey') || '';
+            const key = window.prompt(
+                "Kendi OMDb API anahtarınızı girmek isterseniz buraya yazın.\n\nÜcretsiz anahtar: omdbapi.com/apikey.aspx\n\n(Boş bırakıp Tamam'a basarsanız varsayılan anahtara döner)",
+                current
+            );
+            if (key === null) return;
+            if (key.trim() === '') localStorage.removeItem('omdbApiKey');
+            else localStorage.setItem('omdbApiKey', key.trim());
+            setupApiKeyHint();
+        }
+
+        async function fetchOmdbSearch(query, apiKey) {
+            const res = await fetch(`https://www.omdbapi.com/?apikey=${encodeURIComponent(apiKey)}&s=${encodeURIComponent(query)}`);
+            const data = await res.json();
+            if (data.Response === 'False') {
+                if ((data.Error || '').toLowerCase().includes('invalid api key')) {
+                    const err = new Error('invalid key'); err.invalidKey = true; throw err;
+                }
+                return [];
+            }
+            return data.Search || [];
+        }
+
+        function renderOmdbResults(results, resultsBox) {
+            resultsBox.innerHTML = "";
+            results.slice(0, 10).forEach(r => {
+                const isTv = r.Type === 'series';
+                const poster = (r.Poster && r.Poster !== 'N/A') ? r.Poster : '';
+                const typeLabel = r.Type === 'series' ? 'Dizi' : (r.Type === 'episode' ? 'Bölüm' : 'Film');
+
+                const item = document.createElement('div');
+                item.className = 'imdb-result-item';
+                item.innerHTML = `
+                    ${poster ? `<img src="${poster}" alt="">` : `<div style="width:40px;height:56px;background:var(--panel-raised);border-radius:4px;flex-shrink:0;"></div>`}
+                    <div class="imdb-result-info">
+                        <div class="imdb-result-title">${escapeHtml(r.Title)} (${escapeHtml(r.Year)})</div>
+                        <div class="imdb-result-meta">${typeLabel}</div>
+                        <div class="imdb-result-id">${r.imdbID}</div>
+                    </div>
+                    <div class="imdb-result-actions">
+                        <button class="imdb-mini-btn" data-action="use">Kullan</button>
+                        <button class="imdb-mini-btn" data-action="copy">Kopyala</button>
+                    </div>
+                `;
+                item.querySelector('[data-action="use"]').onclick = () => {
+                    document.getElementById('mName').value = r.Title;
+                    document.getElementById('mType').value = isTv ? 'tv' : 'movie';
+                    document.getElementById('mId').value = r.imdbID;
+                    document.getElementById('mPoster').value = poster || '';
+                    updateUI();
+                };
+                item.querySelector('[data-action="copy"]').onclick = (evt) => copyToClipboard(r.imdbID, evt.target);
+                resultsBox.appendChild(item);
+            });
+        }
+
+        async function proxyFetchText(url, timeoutMs = 4000) {
+            const withTimeout = (getPromise) => {
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), timeoutMs);
+                return getPromise(controller.signal).finally(() => clearTimeout(timer));
+            };
+
+            const attempts = [
+                withTimeout(signal => fetch(url, { signal }).then(r => { if (!r.ok) throw new Error('bad'); return r.text(); })),
+                withTimeout(signal => fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, { signal }).then(r => { if (!r.ok) throw new Error('bad'); return r.text(); })),
+                withTimeout(signal => fetch(`https://corsproxy.io/?url=${encodeURIComponent(url)}`, { signal }).then(r => { if (!r.ok) throw new Error('bad'); return r.text(); })),
+                withTimeout(signal => fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`, { signal }).then(r => { if (!r.ok) throw new Error('bad'); return r.json(); }).then(w => w.contents))
+            ];
+
+            try {
+                return await Promise.any(attempts);
+            } catch (e) {
+                throw new Error('Tüm bağlantı yöntemleri başarısız oldu');
+            }
+        }
+
+        async function fetchImdbSuggestions(query) {
+            const firstChar = (query.match(/[a-zA-Z0-9]/) || ['a'])[0].toLowerCase();
+            const targetUrl = `https://v2.sg.media-imdb.com/suggestion/${firstChar}/${encodeURIComponent(query)}.json`;
+            const text = await proxyFetchText(targetUrl);
+            const data = JSON.parse(text);
+            if (!data || !Array.isArray(data.d)) throw new Error('Geçersiz yanıt');
+            return data;
+        }
+
+        async function fetchImdbViaWebSearch(query) {
+            const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent('site:imdb.com/title ' + query)}`;
+            const html = await proxyFetchText(searchUrl);
+
+            const results = [];
+            const seen = new Set();
+            const anchorRegex = /<a[^>]+class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
+            let m;
+            while ((m = anchorRegex.exec(html)) !== null) {
+                let href = m[1];
+                let title = m[2].replace(/<[^>]+>/g, '').trim()
+                    .replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"');
+
+                const uddgMatch = href.match(/uddg=([^&]+)/);
+                if (uddgMatch) {
+                    try { href = decodeURIComponent(uddgMatch[1]); } catch (e) { }
+                }
+
+                const ttMatch = href.match(/imdb\.com\/title\/(tt\d{6,9})/);
+                if (ttMatch && !seen.has(ttMatch[1])) {
+                    seen.add(ttMatch[1]);
+                    results.push({ id: ttMatch[1], title: title || query });
+                }
+            }
+            return results;
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        async function performImdbSearch(query) {
+            const mySeq = ++imdbSearchSeq;
+            const resultsBox = document.getElementById('imdbResults');
+            const apiKey = getOmdbApiKey();
+
+            try {
+                const results = await fetchOmdbSearch(query, apiKey);
+                if (mySeq !== imdbSearchSeq) return;
+                if (results.length > 0) {
+                    renderOmdbResults(results, resultsBox);
+                    return;
+                }
+                resultsBox.innerHTML = `<div class="search-status">Sonuç bulunamadı.</div>`;
+                return;
+            } catch (err) {
+                if (err && err.invalidKey && localStorage.getItem('omdbApiKey')) {
+                    // Sadece kullanıcının kendi eklediği özel anahtar geçersizse temizle, varsayılana dön
+                    localStorage.removeItem('omdbApiKey');
+                    setupApiKeyHint();
+                    resultsBox.innerHTML = `<div class="search-status">Özel anahtar geçersiz, varsayılana dönüldü. Tekrar yazın.</div>`;
+                    return;
+                }
+                // apiKey tamamen başarısızsa (ağ sorunu vb.) yavaş moda düş
+            }
+
+            try {
+                const data = await fetchImdbSuggestions(query);
+                if (mySeq !== imdbSearchSeq) return;
+                const titles = (data.d || []).filter(x => x.id && x.id.startsWith('tt'));
+                if (titles.length > 0) {
+                    renderImdbSuggestionResults(titles, resultsBox);
+                    return;
+                }
+            } catch (err) { }
+
+            if (mySeq !== imdbSearchSeq) return;
+            resultsBox.innerHTML = `<div class="search-status">Web üzerinden aranıyor...</div>`;
+
+            try {
+                const webResults = await fetchImdbViaWebSearch(query);
+                if (mySeq !== imdbSearchSeq) return;
+                if (webResults.length === 0) throw new Error('sonuç yok');
+                renderWebSearchResults(webResults, resultsBox);
+            } catch (err2) {
+                if (mySeq !== imdbSearchSeq) return;
+                resultsBox.innerHTML = `<div class="search-status">
+                    Arama şu an yanıt vermiyor.<br>
+                    <a href="https://www.imdb.com/find/?q=${encodeURIComponent(query)}" target="_blank" rel="noopener">IMDb'de aç →</a>
+                    ve linki aşağıya yapıştır.
+                </div>`;
+            }
+        }
+
+        function renderImdbSuggestionResults(titles, resultsBox) {
+            resultsBox.innerHTML = "";
+            titles.slice(0, 10).forEach(t => {
+                const isTv = (t.qid || '').toLowerCase().includes('series') || (t.qid || '').toLowerCase().includes('episode');
+                const year = t.y ? ` (${t.y})` : '';
+                const typeLabel = t.q || (isTv ? 'Dizi' : 'Film');
+                const poster = (t.i && t.i.imageUrl) ? t.i.imageUrl : '';
+
+                const item = document.createElement('div');
+                item.className = 'imdb-result-item';
+                item.innerHTML = `
+                    ${poster ? `<img src="${poster}" alt="">` : `<div style="width:40px;height:56px;background:var(--panel-raised);border-radius:4px;flex-shrink:0;"></div>`}
+                    <div class="imdb-result-info">
+                        <div class="imdb-result-title">${escapeHtml(t.l)}${year}</div>
+                        <div class="imdb-result-meta">${escapeHtml(typeLabel)}</div>
+                        <div class="imdb-result-id">${t.id}</div>
+                    </div>
+                    <div class="imdb-result-actions">
+                        <button class="imdb-mini-btn" data-action="use">Kullan</button>
+                        <button class="imdb-mini-btn" data-action="copy">Kopyala</button>
+                    </div>
+                `;
+                item.querySelector('[data-action="use"]').onclick = () => {
+                    document.getElementById('mName').value = t.l;
+                    document.getElementById('mType').value = isTv ? 'tv' : 'movie';
+                    document.getElementById('mId').value = t.id;
+                    document.getElementById('mPoster').value = poster || '';
+                    updateUI();
+                };
+                item.querySelector('[data-action="copy"]').onclick = (evt) => copyToClipboard(t.id, evt.target);
+                resultsBox.appendChild(item);
+            });
+        }
+
+        function renderWebSearchResults(results, resultsBox) {
+            resultsBox.innerHTML = `<div class="search-status" style="padding:4px 0 10px 0;">Web aramasından bulundu:</div>`;
+            results.slice(0, 10).forEach(r => {
+                const item = document.createElement('div');
+                item.className = 'imdb-result-item';
+                item.innerHTML = `
+                    <div style="width:40px;height:56px;background:var(--panel-raised);border-radius:4px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.2rem;">🎬</div>
+                    <div class="imdb-result-info">
+                        <div class="imdb-result-title">${escapeHtml(r.title)}</div>
+                        <div class="imdb-result-meta">Tür otomatik algılanamadı</div>
+                        <div class="imdb-result-id">${r.id}</div>
+                    </div>
+                    <div class="imdb-result-actions">
+                        <button class="imdb-mini-btn" data-action="use">Kullan</button>
+                        <button class="imdb-mini-btn" data-action="copy">Kopyala</button>
+                    </div>
+                `;
+                item.querySelector('[data-action="use"]').onclick = () => {
+                    document.getElementById('mName').value = r.title;
+                    document.getElementById('mId').value = r.id;
+                    document.getElementById('mPoster').value = '';
+                    updateUI();
+                };
+                item.querySelector('[data-action="copy"]').onclick = (evt) => copyToClipboard(r.id, evt.target);
+                resultsBox.appendChild(item);
+            });
+        }
+
+        function extractIdFromUrl() {
+            const raw = document.getElementById('imdbUrlInput').value.trim();
+            const resultBox = document.getElementById('urlExtractResult');
+            const match = raw.match(/tt\d{6,9}/);
+
+            if (!match) {
+                resultBox.innerHTML = `<span style="color:#ff5d5d; font-size:0.8rem;">Geçerli bir IMDb ID/linki bulunamadı.</span>`;
+                return;
+            }
+
+            const id = match[0];
+            resultBox.innerHTML = `
+                <span class="imdb-result-id" style="font-size:0.9rem;">${id}</span>
+                <div style="display:flex; gap:6px;">
+                    <button class="imdb-mini-btn" data-action="use">Kullan</button>
+                    <button class="imdb-mini-btn" data-action="copy">Kopyala</button>
+                </div>
+            `;
+            resultBox.querySelector('[data-action="use"]').onclick = () => {
+                document.getElementById('mId').value = id;
+            };
+            resultBox.querySelector('[data-action="copy"]').onclick = (evt) => copyToClipboard(id, evt.target);
+        }
+
+        function copyToClipboard(text, btnEl) {
+            const done = () => {
+                const original = btnEl.textContent;
+                btnEl.textContent = "✓ Kopyalandı";
+                btnEl.classList.add('copied');
+                setTimeout(() => { btnEl.textContent = original; btnEl.classList.remove('copied'); }, 1500);
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+            } else {
+                fallbackCopy(text, done);
+            }
+        }
+
+        function fallbackCopy(text, done) {
+            const ta = document.createElement('textarea');
+            ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+            document.body.appendChild(ta); ta.select();
+            try { document.execCommand('copy'); done(); } catch (e) {}
+            document.body.removeChild(ta);
+        }
+    </script>
+</body>
+</html>
