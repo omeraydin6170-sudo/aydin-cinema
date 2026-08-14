@@ -284,6 +284,28 @@
         .poster-card:hover .poster-play { opacity: 1; transform: translate(-50%,-50%) scale(1); }
         .poster-card .poster-play .icon { width: 17px; height: 17px; margin-left: 2px; }
 
+        /* ===== RECOMMENDATIONS (Watchmode) ===== */
+        .recommend-controls { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; align-items: center; }
+        .recommend-controls select { min-width: 140px; flex: 1 1 140px; }
+        .recommend-controls .rm-go-btn { flex: 0 0 auto; width: auto; padding: 12px 20px; white-space: nowrap; }
+        .recommend-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 14px;
+        }
+        .recommend-loadmore { display: flex; justify-content: center; margin-top: 20px; }
+        .recommend-loadmore button { width: auto; padding: 12px 24px; }
+        .recommend-status {
+            color: var(--dim); font-size: 0.85rem; padding: 40px 10px; text-align: center;
+            grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: 8px;
+        }
+        .recommend-status .icon { width: 28px; height: 28px; color: var(--dim-2); }
+        .recommend-status.error { color: var(--hot); }
+        .recommend-status a { color: var(--marquee); }
+        .rm-score {
+            position: absolute; top: 8px; right: 8px; font-family: var(--mono); font-size: 0.62rem; font-weight: 700;
+            padding: 3px 6px; border-radius: 5px; background: rgba(7,8,14,0.78); color: var(--marquee);
+            border: 1px solid rgba(255,183,3,0.35);
+        }
+
         .empty-state {
             display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
             padding: 50px 20px; color: var(--dim); text-align: center;
@@ -522,6 +544,8 @@
         <symbol id="ic-film" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="8" y1="5" x2="8" y2="19"/><line x1="16" y1="5" x2="16" y2="19"/><line x1="3" y1="9.5" x2="8" y2="9.5"/><line x1="3" y1="14.5" x2="8" y2="14.5"/><line x1="16" y1="9.5" x2="21" y2="9.5"/><line x1="16" y1="14.5" x2="21" y2="14.5"/></symbol>
         <symbol id="ic-trash" viewBox="0 0 24 24"><polyline points="4,7 20,7"/><path d="M6 7l1 13h10l1-13"/><path d="M9 7V4h6v3"/></symbol>
         <symbol id="ic-link" viewBox="0 0 24 24"><path d="M9 15l6-6"/><path d="M11 6l1-1a4 4 0 0 1 6 6l-1 1"/><path d="M13 18l-1 1a4 4 0 0 1-6-6l1-1"/></symbol>
+        <symbol id="ic-star" viewBox="0 0 24 24"><polygon points="12,3 14.7,9.2 21.5,9.8 16.3,14.2 17.9,21 12,17.3 6.1,21 7.7,14.2 2.5,9.8 9.3,9.2"/></symbol>
+        <symbol id="ic-refresh" viewBox="0 0 24 24"><path d="M20 11A8 8 0 0 0 6.3 6.3L4 8.5"/><path d="M4 4v4.5h4.5"/><path d="M4 13a8 8 0 0 0 13.7 4.7L20 15.5"/><path d="M20 20v-4.5h-4.5"/></symbol>
     </svg>
 
     <div class="marquee-strip">
@@ -540,6 +564,7 @@
             <div class="nav-tabs">
                 <button class="nav-tab active" id="navHomeTab" onclick="scrollToSection('heroSection')">Ana Sayfa</button>
                 <button class="nav-tab" id="navHistoryTab" onclick="scrollToSection('historySection')">Geçmiş</button>
+                <button class="nav-tab" id="navRecommendTab" onclick="scrollToSection('recommendSection')">Öneriler</button>
             </div>
             <div class="nav-spacer"></div>
             <div class="nav-actions">
@@ -601,51 +626,6 @@
             </div>
         </section>
 
-        <!-- ================= ÖNERİLER (Watchmode) ================= -->
-        <section class="section" id="recoTrendSection">
-            <div class="section-head">
-                <h2><span class="bar"></span>Trend Olanlar <span class="sync-pill on" style="margin-left:2px;"><span class="dot"></span>BU HAFTA</span></h2>
-            </div>
-            <div class="carousel-wrap">
-                <button class="carousel-arrow left" onclick="scrollCarouselEl('recoTrendTrack',-1)" aria-label="Sola kaydır"><svg class="icon"><use href="#ic-chev-l"/></svg></button>
-                <div class="carousel-track" id="recoTrendTrack"><div class="search-status">Öneriler yükleniyor...</div></div>
-                <button class="carousel-arrow right" onclick="scrollCarouselEl('recoTrendTrack',1)" aria-label="Sağa kaydır"><svg class="icon"><use href="#ic-chev-r"/></svg></button>
-            </div>
-        </section>
-
-        <section class="section" id="recoMoviesSection">
-            <div class="section-head">
-                <h2><span class="bar"></span>Popüler Filmler</h2>
-            </div>
-            <div class="carousel-wrap">
-                <button class="carousel-arrow left" onclick="scrollCarouselEl('recoMoviesTrack',-1)" aria-label="Sola kaydır"><svg class="icon"><use href="#ic-chev-l"/></svg></button>
-                <div class="carousel-track" id="recoMoviesTrack"><div class="search-status">Öneriler yükleniyor...</div></div>
-                <button class="carousel-arrow right" onclick="scrollCarouselEl('recoMoviesTrack',1)" aria-label="Sağa kaydır"><svg class="icon"><use href="#ic-chev-r"/></svg></button>
-            </div>
-        </section>
-
-        <section class="section" id="recoTvSection">
-            <div class="section-head">
-                <h2><span class="bar"></span>Popüler Diziler</h2>
-            </div>
-            <div class="carousel-wrap">
-                <button class="carousel-arrow left" onclick="scrollCarouselEl('recoTvTrack',-1)" aria-label="Sola kaydır"><svg class="icon"><use href="#ic-chev-l"/></svg></button>
-                <div class="carousel-track" id="recoTvTrack"><div class="search-status">Öneriler yükleniyor...</div></div>
-                <button class="carousel-arrow right" onclick="scrollCarouselEl('recoTvTrack',1)" aria-label="Sağa kaydır"><svg class="icon"><use href="#ic-chev-r"/></svg></button>
-            </div>
-        </section>
-
-        <section class="section" id="recoTopSection">
-            <div class="section-head">
-                <h2><span class="bar"></span>En Çok Beğenilenler</h2>
-            </div>
-            <div class="carousel-wrap">
-                <button class="carousel-arrow left" onclick="scrollCarouselEl('recoTopTrack',-1)" aria-label="Sola kaydır"><svg class="icon"><use href="#ic-chev-l"/></svg></button>
-                <div class="carousel-track" id="recoTopTrack"><div class="search-status">Öneriler yükleniyor...</div></div>
-                <button class="carousel-arrow right" onclick="scrollCarouselEl('recoTopTrack',1)" aria-label="Sağa kaydır"><svg class="icon"><use href="#ic-chev-r"/></svg></button>
-            </div>
-        </section>
-
         <!-- ================= HISTORY ================= -->
         <section class="section" id="historySection">
             <div class="section-head">
@@ -656,6 +636,38 @@
                 <button class="carousel-arrow left" onclick="scrollCarousel(-1)" aria-label="Sola kaydır"><svg class="icon"><use href="#ic-chev-l"/></svg></button>
                 <div class="carousel-track" id="historyTrack"></div>
                 <button class="carousel-arrow right" onclick="scrollCarousel(1)" aria-label="Sağa kaydır"><svg class="icon"><use href="#ic-chev-r"/></svg></button>
+            </div>
+        </section>
+
+        <!-- ================= RECOMMENDATIONS (Watchmode) ================= -->
+        <section class="section" id="recommendSection">
+            <div class="section-head">
+                <h2><span class="bar"></span>Ne İzlesem?</h2>
+            </div>
+
+            <div class="recommend-controls">
+                <select id="rmType">
+                    <option value="movie,tv_series">Film + Dizi</option>
+                    <option value="movie">Sadece Film</option>
+                    <option value="tv_series">Sadece Dizi</option>
+                </select>
+                <select id="rmGenre"><option value="">Tüm Türler</option></select>
+                <select id="rmSort">
+                    <option value="popularity_desc">Popüler</option>
+                    <option value="relevance_desc">İlgi Alanı</option>
+                    <option value="release_date_desc">Yeni Çıkanlar</option>
+                    <option value="critic_score_desc">En Çok Beğenilen</option>
+                </select>
+                <button class="btn-block rm-go-btn" onclick="loadRecommendations(true)">
+                    <svg class="icon" style="display:inline;vertical-align:-3px;margin-right:6px;"><use href="#ic-refresh"/></svg>Öneri Getir
+                </button>
+            </div>
+            <div id="rmApiKeyHint" class="api-key-hint"></div>
+
+            <div id="recommendGrid" class="recommend-grid"></div>
+
+            <div class="recommend-loadmore" id="recommendLoadMoreWrap" style="display:none;">
+                <button class="btn-block" id="recommendLoadMoreBtn">Daha Fazla Göster</button>
             </div>
         </section>
     </div>
@@ -671,6 +683,9 @@
             </button>
             <button class="bottom-nav-btn" id="bnHistory" onclick="scrollToSection('historySection')">
                 <svg class="icon"><use href="#ic-history"/></svg>Geçmiş
+            </button>
+            <button class="bottom-nav-btn" id="bnRecommend" onclick="scrollToSection('recommendSection')">
+                <svg class="icon"><use href="#ic-star"/></svg>Öneri
             </button>
             <button class="bottom-nav-btn" onclick="openOverlay('accountOverlay')">
                 <svg class="icon"><use href="#ic-user"/></svg>Hesap
@@ -734,16 +749,19 @@
         function setActiveNav(id) {
             document.getElementById('navHomeTab').classList.toggle('active', id === 'heroSection');
             document.getElementById('navHistoryTab').classList.toggle('active', id === 'historySection');
+            document.getElementById('navRecommendTab').classList.toggle('active', id === 'recommendSection');
             document.getElementById('bnHome').classList.toggle('active', id === 'heroSection');
             document.getElementById('bnHistory').classList.toggle('active', id === 'historySection');
+            document.getElementById('bnRecommend').classList.toggle('active', id === 'recommendSection');
         }
         (function () {
             const hero = document.getElementById('heroSection');
             const hist = document.getElementById('historySection');
+            const rec = document.getElementById('recommendSection');
             const io = new IntersectionObserver((entries) => {
                 entries.forEach(en => { if (en.isIntersecting) setActiveNav(en.target.id); });
             }, { rootMargin: '-40% 0px -55% 0px', threshold: 0 });
-            io.observe(hero); io.observe(hist);
+            io.observe(hero); io.observe(hist); io.observe(rec);
         })();
 
         function openOverlay(id) {
@@ -763,10 +781,8 @@
             }
         });
 
-        function scrollCarousel(dir) { scrollCarouselEl('historyTrack', dir); }
-        function scrollCarouselEl(trackId, dir) {
-            const track = document.getElementById(trackId);
-            if (!track) return;
+        function scrollCarousel(dir) {
+            const track = document.getElementById('historyTrack');
             track.scrollBy({ left: dir * (track.clientWidth * 0.8), behavior: 'smooth' });
         }
 
@@ -942,161 +958,9 @@
             setupApiKeyHint();
             renderAccountPanel();
             updateAccountNavIcon();
-            loadAllRecommendations();
+            setupWatchmodeApiKeyHint();
+            loadWatchmodeGenres();
         };
-
-        /* ================= ÖNERİLER (Watchmode API) ================= */
-        // Watchmode: pop\u00fcler/trend ba\u015fl\u0131k listesi (IMDb ID d\u00f6nd\u00fcr\u00fcr) + poster i\u00e7in mevcut OMDb anahtar\u0131m\u0131z\u0131 kullan\u0131r.
-        const WATCHMODE_API_KEY = '5MEhpr2fYZIXBJjBmlHFnad3KDJTAdD1t0FaTJda';
-        const RECO_CACHE_KEY = 'cinemaRecoCache';
-        const RECO_TTL_MS = 6 * 60 * 60 * 1000; // 6 saat taze kal, sonra yenile
-
-        function getRecoCacheStore() {
-            try { return JSON.parse(localStorage.getItem(RECO_CACHE_KEY)) || {}; }
-            catch (e) { return {}; }
-        }
-        function setRecoCacheEntry(key, items) {
-            const store = getRecoCacheStore();
-            store[key] = { items, fetchedAt: Date.now() };
-            try { localStorage.setItem(RECO_CACHE_KEY, JSON.stringify(store)); } catch (e) { }
-        }
-        function getRecoCacheEntry(key) {
-            const store = getRecoCacheStore();
-            const entry = store[key];
-            if (!entry) return null;
-            if (Date.now() - entry.fetchedAt > RECO_TTL_MS) return null;
-            return entry.items;
-        }
-
-        function delay(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
-
-        // Watchmode do\u011frudan CORS destekliyor (proxy gerekmiyor), ama d\u00fc\u015f\u00fck bir istek/saniye
-        // limiti var. Bu y\u00fczden 429 (limit a\u015f\u0131ld\u0131) durumunda k\u0131sa bekleyip yeniden dener.
-        async function fetchWatchmodeTitles(queryParams, retries = 3) {
-            const url = `https://api.watchmode.com/v1/list-titles/?apiKey=${encodeURIComponent(WATCHMODE_API_KEY)}&${queryParams}`;
-            let lastErr = null;
-
-            for (let attempt = 0; attempt <= retries; attempt++) {
-                try {
-                    const res = await fetch(url);
-                    if (res.status === 429) {
-                        lastErr = new Error('Watchmode istek limiti aşıldı (429)');
-                        if (attempt < retries) { await delay(1200 * (attempt + 1)); continue; }
-                        throw lastErr;
-                    }
-                    if (!res.ok) throw new Error('Watchmode isteği başarısız: HTTP ' + res.status);
-
-                    const data = await res.json();
-                    if (!data || !Array.isArray(data.title_results)) {
-                        console.error('Watchmode beklenmeyen yanıt verdi:', data);
-                        throw new Error('Geçersiz Watchmode yanıtı: ' + JSON.stringify(data).slice(0, 200));
-                    }
-
-                    return data.title_results
-                        .filter(t => t.imdb_id)
-                        .map(t => ({
-                            name: t.title,
-                            type: (t.type === 'tv_series' || t.type === 'tv_miniseries') ? 'tv' : 'movie',
-                            id: t.imdb_id
-                        }));
-                } catch (err) {
-                    lastErr = err;
-                    if (attempt < retries) { await delay(1000 * (attempt + 1)); continue; }
-                    throw lastErr;
-                }
-            }
-            throw lastErr || new Error('Watchmode isteği başarısız oldu');
-        }
-
-        async function enrichWithPosters(items) {
-            const results = await Promise.all(items.map(async (item) => {
-                try {
-                    const poster = await fetchPosterForId(item.id);
-                    return { ...item, poster: poster || '' };
-                } catch (e) {
-                    return { ...item, poster: '' };
-                }
-            }));
-            return results;
-        }
-
-        function recoCardMarkup(item) {
-            const isTv = item.type === 'tv';
-            const posterInner = item.poster
-                ? `<img src="${item.poster}" alt="" loading="lazy">`
-                : `<div class="poster-placeholder"><svg class="icon"><use href="#ic-film"/></svg></div>`;
-            return `
-                <div class="poster-card" data-id="${escapeHtml(item.id)}" data-type="${isTv ? 'tv' : 'movie'}" data-name="${escapeHtml(item.name)}" data-poster="${escapeHtml(item.poster || '')}" tabindex="0" role="button" aria-label="${escapeHtml(item.name)}">
-                    <div class="poster-img-wrap">
-                        ${posterInner}
-                        <span class="poster-badge ${isTv ? 'tv' : 'movie'}">${isTv ? 'DİZİ' : 'FİLM'}</span>
-                        <div class="poster-play"><svg class="icon"><use href="#ic-play"/></svg></div>
-                        <div class="poster-overlay">
-                            <div class="poster-title">${escapeHtml(item.name)}</div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-
-        function renderRecoRow(trackId, items) {
-            const track = document.getElementById(trackId);
-            if (!track) return;
-            if (!items.length) {
-                track.innerHTML = `<div class="search-status">Şu an öneri getirilemedi.</div>`;
-                return;
-            }
-            track.innerHTML = items.map(recoCardMarkup).join('');
-            track.querySelectorAll('.poster-card').forEach(card => {
-                const activate = () => {
-                    document.getElementById('mName').value = card.dataset.name;
-                    document.getElementById('mType').value = card.dataset.type;
-                    document.getElementById('mId').value = card.dataset.id;
-                    document.getElementById('mPoster').value = card.dataset.poster || '';
-                    if (card.dataset.type === 'tv') {
-                        document.getElementById('season').value = 1;
-                        document.getElementById('episode').value = 1;
-                    }
-                    updateUI();
-                    loadMedia();
-                    scrollToSection('heroSection');
-                };
-                card.addEventListener('click', activate);
-                card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } });
-            });
-        }
-
-        async function loadRecoRow(cacheKey, trackId, queryParams) {
-            const cached = getRecoCacheEntry(cacheKey);
-            if (cached) { renderRecoRow(trackId, cached); return; }
-
-            try {
-                const baseItems = await fetchWatchmodeTitles(queryParams);
-                const top = baseItems.slice(0, 14);
-                const enriched = await enrichWithPosters(top);
-                setRecoCacheEntry(cacheKey, enriched);
-                renderRecoRow(trackId, enriched);
-            } catch (err) {
-                console.error(`Öneri satırı yüklenemedi (${cacheKey}):`, err);
-                const track = document.getElementById(trackId);
-                if (track) {
-                    const msg = (err && err.message && err.message.includes('429'))
-                        ? 'Watchmode isteği limiti aşıldı, birazdan tekrar denenecek.'
-                        : `Öneriler şu an yüklenemiyor. <span style="opacity:.6;">(${escapeHtml((err && err.message) || '').slice(0,120)})</span>`;
-                    track.innerHTML = `<div class="search-status">${msg}</div>`;
-                }
-            }
-        }
-
-        async function loadAllRecommendations() {
-            await loadRecoRow('trend', 'recoTrendTrack', 'types=movie,tv_series&sort_by=popularity_desc&limit=14');
-            await delay(500);
-            await loadRecoRow('moviesPopular', 'recoMoviesTrack', 'types=movie&sort_by=popularity_desc&limit=14');
-            await delay(500);
-            await loadRecoRow('tvPopular', 'recoTvTrack', 'types=tv_series&sort_by=popularity_desc&limit=14');
-            await delay(500);
-            await loadRecoRow('topRated', 'recoTopTrack', 'types=movie,tv_series&sort_by=popularity_desc&user_rating_low=80&limit=14');
-        }
 
         /* ================= OYNATICI ================= */
         function updateUI() {
@@ -1394,8 +1258,8 @@
 
             const attempts = [
                 withTimeout(signal => fetch(url, { signal }).then(r => { if (!r.ok) throw new Error('bad'); return r.text(); })),
-                withTimeout(signal => fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`, { signal }).then(r => { if (!r.ok) throw new Error('bad'); return r.text(); })),
                 withTimeout(signal => fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, { signal }).then(r => { if (!r.ok) throw new Error('bad'); return r.text(); })),
+                withTimeout(signal => fetch(`https://corsproxy.io/?url=${encodeURIComponent(url)}`, { signal }).then(r => { if (!r.ok) throw new Error('bad'); return r.text(); })),
                 withTimeout(signal => fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`, { signal }).then(r => { if (!r.ok) throw new Error('bad'); return r.json(); }).then(w => w.contents))
             ];
 
@@ -1612,6 +1476,226 @@
             try { document.execCommand('copy'); done(); } catch (e) {}
             document.body.removeChild(ta);
         }
+
+        /* ================= ÖNERİLER (Watchmode API) =================
+           Watchmode ücretsiz bir API anahtarı gerektirir:
+           https://api.watchmode.com/requestApiKey
+           Anahtar bu cihazda localStorage'a kaydedilir, sunucuya gönderilmez.
+        */
+        const WATCHMODE_BASE = 'https://api.watchmode.com/v1';
+        let rmPage = 1;
+        let rmTotalPages = 1;
+        let rmLoading = false;
+
+        function getWatchmodeApiKey() {
+            return localStorage.getItem('watchmodeApiKey') || '';
+        }
+
+        function setupWatchmodeApiKeyHint() {
+            const hint = document.getElementById('rmApiKeyHint');
+            if (!hint) return;
+            const key = getWatchmodeApiKey();
+            if (key) {
+                hint.innerHTML = `<span class="dot-on"></span>Watchmode anahtarı tanımlı · <a href="#" id="rmChangeKeyLink">değiştir</a>`;
+            } else {
+                hint.innerHTML = `Öneri motoru için ücretsiz bir Watchmode API anahtarı gerekir · <a href="#" id="rmChangeKeyLink">anahtar gir</a> · <a href="https://api.watchmode.com/requestApiKey" target="_blank" rel="noopener">ücretsiz anahtar al →</a>`;
+            }
+            const link = document.getElementById('rmChangeKeyLink');
+            if (link) link.onclick = (e) => { e.preventDefault(); promptForWatchmodeApiKey(); };
+        }
+
+        function promptForWatchmodeApiKey() {
+            const current = getWatchmodeApiKey();
+            const key = window.prompt(
+                "Watchmode API anahtarınızı girin.\n\nÜcretsiz anahtar (kredi kartı gerekmez): https://api.watchmode.com/requestApiKey\n\n(Boş bırakıp Tamam'a basarsanız anahtar silinir)",
+                current
+            );
+            if (key === null) return;
+            if (key.trim() === '') localStorage.removeItem('watchmodeApiKey');
+            else localStorage.setItem('watchmodeApiKey', key.trim());
+            setupWatchmodeApiKeyHint();
+        }
+
+        // Watchmode isteklerini önce doğrudan, olmazsa mevcut CORS proxy zinciri üzerinden dener.
+        async function watchmodeFetchJson(path, params) {
+            const apiKey = getWatchmodeApiKey();
+            if (!apiKey) {
+                const err = new Error('no-key'); err.noKey = true; throw err;
+            }
+            const usp = new URLSearchParams(Object.assign({ apiKey }, params || {}));
+            const url = `${WATCHMODE_BASE}${path}?${usp.toString()}`;
+
+            try {
+                const res = await fetch(url);
+                if (res.ok) return await res.json();
+                if (res.status === 401 || res.status === 403) {
+                    const err = new Error('invalid-key'); err.invalidKey = true; throw err;
+                }
+                throw new Error('bad-status');
+            } catch (directErr) {
+                if (directErr.invalidKey) throw directErr;
+                // Doğrudan istek CORS ya da ağ hatasına takıldıysa, proxy zincirine düş.
+                const text = await proxyFetchText(url);
+                return JSON.parse(text);
+            }
+        }
+
+        async function loadWatchmodeGenres() {
+            const select = document.getElementById('rmGenre');
+            if (!select || !getWatchmodeApiKey()) return;
+            try {
+                const data = await watchmodeFetchJson('/genres/', {});
+                const list = Array.isArray(data) ? data : (data.genres || []);
+                if (!list.length) return;
+                list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+                list.forEach(g => {
+                    const opt = document.createElement('option');
+                    opt.value = g.id;
+                    opt.textContent = g.name;
+                    select.appendChild(opt);
+                });
+            } catch (e) { /* tür listesi opsiyonel, sessizce geç */ }
+        }
+
+        function recommendCardMarkup(item) {
+            const isTv = (item.type || '').startsWith('tv');
+            const year = item.year ? item.year : '';
+            const posterInner = `<div class="poster-placeholder" data-poster-slot="${item.id}"><svg class="icon"><use href="#ic-film"/></svg></div>`;
+            return `
+                <div class="poster-card" data-wm-id="${item.id}" data-imdb-id="${item.imdb_id || ''}" data-title="${escapeHtml(item.title || '')}" data-type="${isTv ? 'tv' : 'movie'}" tabindex="0" role="button" aria-label="${escapeHtml(item.title || '')}">
+                    <div class="poster-img-wrap" id="rmPoster-${item.id}">
+                        ${posterInner}
+                        <span class="poster-badge ${isTv ? 'tv' : 'movie'}">${isTv ? 'DİZİ' : 'FİLM'}</span>
+                        <div class="poster-play"><svg class="icon"><use href="#ic-play"/></svg></div>
+                        <div class="poster-overlay">
+                            <div class="poster-title">${escapeHtml(item.title || '')}</div>
+                            <div class="poster-meta">${escapeHtml(String(year))}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function loadRecommendations(reset) {
+            const grid = document.getElementById('recommendGrid');
+            const loadMoreWrap = document.getElementById('recommendLoadMoreWrap');
+            const loadMoreBtn = document.getElementById('recommendLoadMoreBtn');
+            if (rmLoading) return;
+
+            if (!getWatchmodeApiKey()) {
+                grid.innerHTML = `<div class="recommend-status error">
+                    Öneri getirmek için önce bir Watchmode API anahtarı girmelisiniz.<br>
+                    <a href="#" id="rmInlineKeyLink">anahtar gir</a> ·
+                    <a href="https://api.watchmode.com/requestApiKey" target="_blank" rel="noopener">ücretsiz anahtar al →</a>
+                </div>`;
+                const link = document.getElementById('rmInlineKeyLink');
+                if (link) link.onclick = (e) => { e.preventDefault(); promptForWatchmodeApiKey(); loadRecommendations(true); };
+                loadMoreWrap.style.display = 'none';
+                return;
+            }
+
+            if (reset) {
+                rmPage = 1;
+                grid.innerHTML = `<div class="recommend-status"><svg class="icon"><use href="#ic-star"/></svg>Öneriler getiriliyor...</div>`;
+            } else {
+                loadMoreBtn.textContent = 'Yükleniyor...';
+                loadMoreBtn.disabled = true;
+            }
+
+            rmLoading = true;
+            const type = document.getElementById('rmType').value;
+            const sort = document.getElementById('rmSort').value;
+            const genre = document.getElementById('rmGenre').value;
+
+            const params = { types: type, sort_by: sort, page: rmPage };
+            if (genre) params.genres = genre;
+
+            try {
+                const data = await watchmodeFetchJson('/list-titles/', params);
+                const titles = data.titles || [];
+                rmTotalPages = data.total_pages || 1;
+
+                if (reset) grid.innerHTML = '';
+                if (titles.length === 0 && reset) {
+                    grid.innerHTML = `<div class="recommend-status">Bu filtrelerle sonuç bulunamadı, farklı bir tür ya da sıralama deneyin.</div>`;
+                } else {
+                    titles.forEach(item => {
+                        grid.insertAdjacentHTML('beforeend', recommendCardMarkup(item));
+                    });
+                    attachRecommendCardHandlers(titles);
+                    lazyLoadRecommendPosters(titles);
+                }
+
+                loadMoreWrap.style.display = (rmPage < rmTotalPages) ? 'flex' : 'none';
+            } catch (err) {
+                if (err.noKey) return;
+                if (err.invalidKey) {
+                    grid.innerHTML = `<div class="recommend-status error">Watchmode API anahtarı geçersiz görünüyor. <a href="#" id="rmFixKeyLink">anahtarı düzelt</a></div>`;
+                    const link = document.getElementById('rmFixKeyLink');
+                    if (link) link.onclick = (e) => { e.preventDefault(); promptForWatchmodeApiKey(); };
+                } else {
+                    grid.innerHTML = `<div class="recommend-status error">Öneriler alınamadı, bağlantı sorunu olabilir. Birazdan tekrar deneyin.</div>`;
+                }
+                loadMoreWrap.style.display = 'none';
+            } finally {
+                rmLoading = false;
+                loadMoreBtn.textContent = 'Daha Fazla Göster';
+                loadMoreBtn.disabled = false;
+            }
+        }
+
+        function attachRecommendCardHandlers(titles) {
+            titles.forEach(item => {
+                const card = document.querySelector(`.poster-card[data-wm-id="${item.id}"]`);
+                if (!card) return;
+                card.onclick = () => {
+                    if (!item.imdb_id) {
+                        alert('Bu içerik için IMDb ID bulunamadı, arama kısmından manuel eklemeyi deneyebilirsiniz.');
+                        return;
+                    }
+                    document.getElementById('mName').value = item.title || '';
+                    document.getElementById('mType').value = card.dataset.type;
+                    document.getElementById('mId').value = item.imdb_id;
+                    const posterImg = document.querySelector(`#rmPoster-${item.id} img`);
+                    document.getElementById('mPoster').value = posterImg ? posterImg.src : '';
+                    updateUI();
+                    scrollToSection('heroSection');
+                };
+            });
+        }
+
+        // Poster resimlerini kartlar ekrana geldikten sonra OMDb üzerinden tek tek doldurur
+        // (Watchmode liste uç noktası poster döndürmüyor, bu yüzden mevcut OMDb altyapısı kullanılıyor).
+        function lazyLoadRecommendPosters(titles) {
+            const withImdb = titles.filter(t => t.imdb_id);
+            if (!withImdb.length) return;
+
+            const slots = withImdb.map(t => document.getElementById(`rmPoster-${t.id}`)).filter(Boolean);
+            const io = new IntersectionObserver((entries, observer) => {
+                entries.forEach(async (entry) => {
+                    if (!entry.isIntersecting) return;
+                    observer.unobserve(entry.target);
+                    const wmId = entry.target.id.replace('rmPoster-', '');
+                    const item = withImdb.find(t => String(t.id) === wmId);
+                    if (!item) return;
+                    const poster = await fetchPosterForId(item.imdb_id);
+                    if (!poster) return;
+                    const placeholder = entry.target.querySelector('.poster-placeholder');
+                    if (placeholder) {
+                        const img = document.createElement('img');
+                        img.src = poster; img.alt = ''; img.loading = 'lazy';
+                        placeholder.replaceWith(img);
+                    }
+                });
+            }, { rootMargin: '200px' });
+
+            slots.forEach(s => io.observe(s));
+        }
+
+        document.getElementById('recommendLoadMoreBtn').addEventListener('click', () => {
+            rmPage += 1;
+            loadRecommendations(false);
+        });
     </script>
 </body>
 </html>
