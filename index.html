@@ -1294,18 +1294,24 @@
             });
         }
 
-        async function proxyFetchText(url, timeoutMs = 4000) {
+        async function proxyFetchText(url, timeoutMs = 6000) {
             const withTimeout = (getPromise) => {
                 const controller = new AbortController();
                 const timer = setTimeout(() => controller.abort(), timeoutMs);
                 return getPromise(controller.signal).finally(() => clearTimeout(timer));
             };
 
+            // NOT: corsproxy.io 2026 itibarıyla ücretsiz katmanını sadece localhost/geliştirme
+            // ortamlarına kısıtladı, canlı (production) sitelerden isteklerini reddediyor.
+            // Bu yüzden onu listenin sonuna aldık ve daha güvenilir, hâlâ herkese açık
+            // çalışan codetabs proxy'sini öne aldık. allorigins.win ara sıra 500 dönebiliyor,
+            // o yüzden hem raw hem get varyantı ayrı denemeler olarak duruyor.
             const attempts = [
                 withTimeout(signal => fetch(url, { signal }).then(r => { if (!r.ok) throw new Error('bad'); return r.text(); })),
+                withTimeout(signal => fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`, { signal }).then(r => { if (!r.ok) throw new Error('bad'); return r.text(); })),
                 withTimeout(signal => fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, { signal }).then(r => { if (!r.ok) throw new Error('bad'); return r.text(); })),
-                withTimeout(signal => fetch(`https://corsproxy.io/?url=${encodeURIComponent(url)}`, { signal }).then(r => { if (!r.ok) throw new Error('bad'); return r.text(); })),
-                withTimeout(signal => fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`, { signal }).then(r => { if (!r.ok) throw new Error('bad'); return r.json(); }).then(w => w.contents))
+                withTimeout(signal => fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`, { signal }).then(r => { if (!r.ok) throw new Error('bad'); return r.json(); }).then(w => w.contents)),
+                withTimeout(signal => fetch(`https://corsproxy.io/?url=${encodeURIComponent(url)}`, { signal }).then(r => { if (!r.ok) throw new Error('bad'); return r.text(); }))
             ];
 
             try {
@@ -1718,7 +1724,24 @@
             }
         }
 
+        // Aynı anda çok fazla afiş isteği göndermek, ücretsiz CORS proxy'lerinin
+        // (codetabs, allorigins vb.) saniye/dakika başına istek sınırlarına takılıp
+        // hepsinin birden başarısız olmasına yol açabiliyor. Bu yüzden afişleri aynı
+        // anda en fazla `limit` kadar çekiyoruz, geri kalanı sırayla bekletiyoruz.
+        async function runWithConcurrency(tasks, limit) {
+            let cursor = 0;
+            async function worker() {
+                while (cursor < tasks.length) {
+                    const i = cursor++;
+                    try { await tasks[i](); } catch (e) { /* tekil görev hatası akışı bozmasın */ }
+                }
+            }
+            const workers = Array.from({ length: Math.min(limit, tasks.length) }, worker);
+            await Promise.all(workers);
+        }
+
         function attachRecommendCardHandlers(titles) {
+            const posterTasks = [];
             titles.forEach(item => {
                 const card = document.querySelector(`.poster-card[data-wm-id="${item.id}"]`);
                 if (!card) return;
@@ -1741,7 +1764,7 @@
                 // afişini tekrar tekrar çekmek de bedava.
                 if (item.imdb_id) {
                     const wrap = card.querySelector('.poster-img-wrap');
-                    fetchPosterFromImdbOnly(item.imdb_id, true).then(poster => {
+                    posterTasks.push(() => fetchPosterFromImdbOnly(item.imdb_id, true).then(poster => {
                         if (!poster || !wrap) return;
                         const placeholder = wrap.querySelector('.poster-placeholder');
                         if (placeholder) {
@@ -1751,9 +1774,10 @@
                             img.loading = 'lazy';
                             wrap.replaceChild(img, placeholder);
                         }
-                    }).catch(() => { /* afiş bulunamadı, placeholder kalsın */ });
+                    }));
                 }
             });
+            runWithConcurrency(posterTasks, 3);
         }
 
         document.getElementById('recommendLoadMoreBtn').addEventListener('click', () => {
