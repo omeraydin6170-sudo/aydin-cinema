@@ -1078,6 +1078,47 @@
             return poster;
         }
 
+        // Apple'ın iTunes Arama API'si anahtarsız/ücretsizdir VE tarayıcıdan doğrudan
+        // erişime izin verir (CORS proxy'ye ihtiyaç duymaz), bu yüzden bazı ağlarda
+        // corsproxy.io / allorigins.win gibi proxy servislerine erişim engellense bile
+        // (bkz. Türkiye'deki bazı ISS'lerin bu tür proxy'leri bloklaması) çalışmaya
+        // devam eder. Öneri afişleri için birincil kaynak bu.
+        async function fetchPosterFromItunes(title, year, isTv, useCache, cacheKey) {
+            if (useCache && posterCacheMem[cacheKey] !== undefined) return posterCacheMem[cacheKey];
+
+            let poster = '';
+            try {
+                const media = isTv ? 'tvShow' : 'movie';
+                const url = `https://itunes.apple.com/search?term=${encodeURIComponent(title)}&media=${media}&entity=${media}&limit=1`;
+                const res = await fetch(url);
+                if (res.ok) {
+                    const data = await res.json();
+                    const match = (data.results || [])[0];
+                    if (match && match.artworkUrl100) {
+                        // 100x100'lük küçük resmi daha büyük çözünürlüğe çeviriyoruz.
+                        poster = match.artworkUrl100.replace('100x100bb', '600x600bb');
+                    }
+                }
+            } catch (e) { /* iTunes'ta bulunamadı, çağıran taraf IMDb'ye düşebilir */ }
+
+            if (useCache) {
+                posterCacheMem[cacheKey] = poster;
+                writePosterCache(posterCacheMem);
+            }
+            return poster;
+        }
+
+        // Öneri kartları için: önce proxy'siz iTunes'u dener (en güvenilir yol),
+        // bulamazsa proxy zinciriyle IMDb'ye düşer. İkisi de anahtarsız/ücretsizdir.
+        async function fetchRecommendPoster(item) {
+            const cacheKey = 'itunes:' + (item.imdb_id || item.id);
+            let poster = await fetchPosterFromItunes(item.title || '', item.year, (item.type || '').startsWith('tv'), true, cacheKey);
+            if (!poster && item.imdb_id) {
+                poster = await fetchPosterFromImdbOnly(item.imdb_id, true);
+            }
+            return poster;
+        }
+
         /* ================= GEÇMİŞ ================= */
         function saveToHistory(item) {
             let history = JSON.parse(localStorage.getItem('cinemaHistory')) || [];
@@ -1758,13 +1799,13 @@
                     scrollToSection('heroSection');
                 };
 
-                // Afişi hem Watchmode hem OMDb kotasını hiç kullanmadan yükle: sadece
-                // IMDb'nin anahtarsız/ücretsiz öneri servisinden (fetchPosterFromImdbOnly)
-                // çekiliyor ve ortak afiş önbelleğine yazılıyor, o yüzden aynı filmin
-                // afişini tekrar tekrar çekmek de bedava.
-                if (item.imdb_id) {
+                // Afişi hem Watchmode hem OMDb kotasını hiç kullanmadan yükle: önce
+                // proxy'ye ihtiyaç duymayan iTunes API'sini dener (bazı ağlarda CORS
+                // proxy'leri engellense bile çalışır), olmazsa IMDb'nin anahtarsız
+                // servisine düşer. İkisi de ortak afiş önbelleğine yazılır.
+                if (item.imdb_id || item.title) {
                     const wrap = card.querySelector('.poster-img-wrap');
-                    posterTasks.push(() => fetchPosterFromImdbOnly(item.imdb_id, true).then(poster => {
+                    posterTasks.push(() => fetchRecommendPoster(item).then(poster => {
                         if (!poster || !wrap) return;
                         const placeholder = wrap.querySelector('.poster-placeholder');
                         if (placeholder) {
