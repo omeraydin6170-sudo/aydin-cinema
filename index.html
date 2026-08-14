@@ -1020,7 +1020,8 @@
 
         // Afiş sonuçlarını localStorage'da önbelleğe alır: hem tekrar tekrar aynı isteği
         // atmayı önler hem de proxy zincirinin aşırı yüklenmesini azaltır.
-        const POSTER_CACHE_KEY = 'posterCacheV1';
+        const POSTER_CACHE_KEY = 'posterCacheV2'; // v2: eski sürüm 403/ağ hatalarını da kalıcı "bulunamadı" olarak
+        // yanlışlıkla önbelleğe yazıyordu; anahtarı değiştirerek o bozuk kayıtları otomatik geçersiz kılıyoruz.
         function readPosterCache() {
             try { return JSON.parse(localStorage.getItem(POSTER_CACHE_KEY)) || {}; }
             catch (e) { return {}; }
@@ -1087,6 +1088,7 @@
             if (useCache && posterCacheMem[cacheKey] !== undefined) return posterCacheMem[cacheKey];
 
             let poster = '';
+            let requestFailed = false; // 403/ağ hatası: gerçek "bulunamadı" değil, tekrar denenebilir olmalı
             try {
                 const media = isTv ? 'tvShow' : 'movie';
                 const url = `https://itunes.apple.com/search?term=${encodeURIComponent(title)}&media=${media}&entity=${media}&limit=1`;
@@ -1098,10 +1100,15 @@
                         // 100x100'lük küçük resmi daha büyük çözünürlüğe çeviriyoruz.
                         poster = match.artworkUrl100.replace('100x100bb', '600x600bb');
                     }
+                } else {
+                    requestFailed = true; // 403 (rate limit) vb: sonucu kalıcı önbelleğe yazma
                 }
-            } catch (e) { /* iTunes'ta bulunamadı, çağıran taraf IMDb'ye düşebilir */ }
+            } catch (e) { requestFailed = true; /* ağ hatası: sonucu kalıcı önbelleğe yazma */ }
 
-            if (useCache) {
+            // Sadece gerçekten "istek başarılı ama sonuç yok" durumunu kalıcı önbelleğe
+            // yazıyoruz. Rate limit / ağ hatasında hiç yazmıyoruz ki bir sonraki
+            // ziyarette (veya birkaç saniye sonra) tekrar denenebilsin.
+            if (useCache && !requestFailed) {
                 posterCacheMem[cacheKey] = poster;
                 writePosterCache(posterCacheMem);
             }
