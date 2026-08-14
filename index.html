@@ -987,7 +987,10 @@
                     if (!res.ok) throw new Error('Watchmode isteği başarısız: HTTP ' + res.status);
 
                     const data = await res.json();
-                    if (!data || !Array.isArray(data.title_results)) throw new Error('Geçersiz Watchmode yanıtı');
+                    if (!data || !Array.isArray(data.title_results)) {
+                        console.error('Watchmode beklenmeyen yanıt verdi:', data);
+                        throw new Error('Geçersiz Watchmode yanıtı: ' + JSON.stringify(data).slice(0, 200));
+                    }
 
                     return data.title_results
                         .filter(t => t.imdb_id)
@@ -1079,7 +1082,7 @@
                 if (track) {
                     const msg = (err && err.message && err.message.includes('429'))
                         ? 'Watchmode isteği limiti aşıldı, birazdan tekrar denenecek.'
-                        : 'Öneriler şu an yüklenemiyor.';
+                        : `Öneriler şu an yüklenemiyor. <span style="opacity:.6;">(${escapeHtml((err && err.message) || '').slice(0,120)})</span>`;
                     track.innerHTML = `<div class="search-status">${msg}</div>`;
                 }
             }
