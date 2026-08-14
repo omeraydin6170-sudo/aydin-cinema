@@ -601,6 +601,51 @@
             </div>
         </section>
 
+        <!-- ================= ÖNERİLER (Watchmode) ================= -->
+        <section class="section" id="recoTrendSection">
+            <div class="section-head">
+                <h2><span class="bar"></span>Trend Olanlar <span class="sync-pill on" style="margin-left:2px;"><span class="dot"></span>BU HAFTA</span></h2>
+            </div>
+            <div class="carousel-wrap">
+                <button class="carousel-arrow left" onclick="scrollCarouselEl('recoTrendTrack',-1)" aria-label="Sola kaydır"><svg class="icon"><use href="#ic-chev-l"/></svg></button>
+                <div class="carousel-track" id="recoTrendTrack"><div class="search-status">Öneriler yükleniyor...</div></div>
+                <button class="carousel-arrow right" onclick="scrollCarouselEl('recoTrendTrack',1)" aria-label="Sağa kaydır"><svg class="icon"><use href="#ic-chev-r"/></svg></button>
+            </div>
+        </section>
+
+        <section class="section" id="recoMoviesSection">
+            <div class="section-head">
+                <h2><span class="bar"></span>Popüler Filmler</h2>
+            </div>
+            <div class="carousel-wrap">
+                <button class="carousel-arrow left" onclick="scrollCarouselEl('recoMoviesTrack',-1)" aria-label="Sola kaydır"><svg class="icon"><use href="#ic-chev-l"/></svg></button>
+                <div class="carousel-track" id="recoMoviesTrack"><div class="search-status">Öneriler yükleniyor...</div></div>
+                <button class="carousel-arrow right" onclick="scrollCarouselEl('recoMoviesTrack',1)" aria-label="Sağa kaydır"><svg class="icon"><use href="#ic-chev-r"/></svg></button>
+            </div>
+        </section>
+
+        <section class="section" id="recoTvSection">
+            <div class="section-head">
+                <h2><span class="bar"></span>Popüler Diziler</h2>
+            </div>
+            <div class="carousel-wrap">
+                <button class="carousel-arrow left" onclick="scrollCarouselEl('recoTvTrack',-1)" aria-label="Sola kaydır"><svg class="icon"><use href="#ic-chev-l"/></svg></button>
+                <div class="carousel-track" id="recoTvTrack"><div class="search-status">Öneriler yükleniyor...</div></div>
+                <button class="carousel-arrow right" onclick="scrollCarouselEl('recoTvTrack',1)" aria-label="Sağa kaydır"><svg class="icon"><use href="#ic-chev-r"/></svg></button>
+            </div>
+        </section>
+
+        <section class="section" id="recoTopSection">
+            <div class="section-head">
+                <h2><span class="bar"></span>En Çok Beğenilenler</h2>
+            </div>
+            <div class="carousel-wrap">
+                <button class="carousel-arrow left" onclick="scrollCarouselEl('recoTopTrack',-1)" aria-label="Sola kaydır"><svg class="icon"><use href="#ic-chev-l"/></svg></button>
+                <div class="carousel-track" id="recoTopTrack"><div class="search-status">Öneriler yükleniyor...</div></div>
+                <button class="carousel-arrow right" onclick="scrollCarouselEl('recoTopTrack',1)" aria-label="Sağa kaydır"><svg class="icon"><use href="#ic-chev-r"/></svg></button>
+            </div>
+        </section>
+
         <!-- ================= HISTORY ================= -->
         <section class="section" id="historySection">
             <div class="section-head">
@@ -718,8 +763,10 @@
             }
         });
 
-        function scrollCarousel(dir) {
-            const track = document.getElementById('historyTrack');
+        function scrollCarousel(dir) { scrollCarouselEl('historyTrack', dir); }
+        function scrollCarouselEl(trackId, dir) {
+            const track = document.getElementById(trackId);
+            if (!track) return;
             track.scrollBy({ left: dir * (track.clientWidth * 0.8), behavior: 'smooth' });
         }
 
@@ -895,7 +942,127 @@
             setupApiKeyHint();
             renderAccountPanel();
             updateAccountNavIcon();
+            loadAllRecommendations();
         };
+
+        /* ================= ÖNERİLER (Watchmode API) ================= */
+        // Watchmode: pop\u00fcler/trend ba\u015fl\u0131k listesi (IMDb ID d\u00f6nd\u00fcr\u00fcr) + poster i\u00e7in mevcut OMDb anahtar\u0131m\u0131z\u0131 kullan\u0131r.
+        const WATCHMODE_API_KEY = '5MEhpr2fYZIXBJjBmlHFnad3KDJTAdD1t0FaTJda';
+        const RECO_CACHE_KEY = 'cinemaRecoCache';
+        const RECO_TTL_MS = 6 * 60 * 60 * 1000; // 6 saat taze kal, sonra yenile
+
+        function getRecoCacheStore() {
+            try { return JSON.parse(localStorage.getItem(RECO_CACHE_KEY)) || {}; }
+            catch (e) { return {}; }
+        }
+        function setRecoCacheEntry(key, items) {
+            const store = getRecoCacheStore();
+            store[key] = { items, fetchedAt: Date.now() };
+            try { localStorage.setItem(RECO_CACHE_KEY, JSON.stringify(store)); } catch (e) { }
+        }
+        function getRecoCacheEntry(key) {
+            const store = getRecoCacheStore();
+            const entry = store[key];
+            if (!entry) return null;
+            if (Date.now() - entry.fetchedAt > RECO_TTL_MS) return null;
+            return entry.items;
+        }
+
+        async function fetchWatchmodeTitles(queryParams) {
+            const url = `https://api.watchmode.com/v1/list-titles/?apiKey=${encodeURIComponent(WATCHMODE_API_KEY)}&${queryParams}`;
+            const text = await proxyFetchText(url, 7000);
+            const data = JSON.parse(text);
+            if (!data || !Array.isArray(data.title_results)) throw new Error('Geçersiz Watchmode yanıtı');
+            return data.title_results
+                .filter(t => t.imdb_id)
+                .map(t => ({
+                    name: t.title,
+                    type: (t.type === 'tv_series' || t.type === 'tv_miniseries') ? 'tv' : 'movie',
+                    id: t.imdb_id
+                }));
+        }
+
+        async function enrichWithPosters(items) {
+            const results = await Promise.all(items.map(async (item) => {
+                try {
+                    const poster = await fetchPosterForId(item.id);
+                    return { ...item, poster: poster || '' };
+                } catch (e) {
+                    return { ...item, poster: '' };
+                }
+            }));
+            return results;
+        }
+
+        function recoCardMarkup(item) {
+            const isTv = item.type === 'tv';
+            const posterInner = item.poster
+                ? `<img src="${item.poster}" alt="" loading="lazy">`
+                : `<div class="poster-placeholder"><svg class="icon"><use href="#ic-film"/></svg></div>`;
+            return `
+                <div class="poster-card" data-id="${escapeHtml(item.id)}" data-type="${isTv ? 'tv' : 'movie'}" data-name="${escapeHtml(item.name)}" data-poster="${escapeHtml(item.poster || '')}" tabindex="0" role="button" aria-label="${escapeHtml(item.name)}">
+                    <div class="poster-img-wrap">
+                        ${posterInner}
+                        <span class="poster-badge ${isTv ? 'tv' : 'movie'}">${isTv ? 'DİZİ' : 'FİLM'}</span>
+                        <div class="poster-play"><svg class="icon"><use href="#ic-play"/></svg></div>
+                        <div class="poster-overlay">
+                            <div class="poster-title">${escapeHtml(item.name)}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderRecoRow(trackId, items) {
+            const track = document.getElementById(trackId);
+            if (!track) return;
+            if (!items.length) {
+                track.innerHTML = `<div class="search-status">Şu an öneri getirilemedi.</div>`;
+                return;
+            }
+            track.innerHTML = items.map(recoCardMarkup).join('');
+            track.querySelectorAll('.poster-card').forEach(card => {
+                const activate = () => {
+                    document.getElementById('mName').value = card.dataset.name;
+                    document.getElementById('mType').value = card.dataset.type;
+                    document.getElementById('mId').value = card.dataset.id;
+                    document.getElementById('mPoster').value = card.dataset.poster || '';
+                    if (card.dataset.type === 'tv') {
+                        document.getElementById('season').value = 1;
+                        document.getElementById('episode').value = 1;
+                    }
+                    updateUI();
+                    loadMedia();
+                    scrollToSection('heroSection');
+                };
+                card.addEventListener('click', activate);
+                card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } });
+            });
+        }
+
+        async function loadRecoRow(cacheKey, trackId, queryParams) {
+            const cached = getRecoCacheEntry(cacheKey);
+            if (cached) { renderRecoRow(trackId, cached); return; }
+
+            try {
+                const baseItems = await fetchWatchmodeTitles(queryParams);
+                const top = baseItems.slice(0, 14);
+                const enriched = await enrichWithPosters(top);
+                setRecoCacheEntry(cacheKey, enriched);
+                renderRecoRow(trackId, enriched);
+            } catch (err) {
+                console.error(`Öneri satırı yüklenemedi (${cacheKey}):`, err);
+                const track = document.getElementById(trackId);
+                if (track) track.innerHTML = `<div class="search-status">Öneriler şu an yüklenemiyor. (Watchmode bağlantı sorunu)</div>`;
+            }
+        }
+
+        function loadAllRecommendations() {
+            loadRecoRow('trend', 'recoTrendTrack', 'types=movie,tv_series&sort_by=popularity_desc&limit=14');
+            loadRecoRow('moviesPopular', 'recoMoviesTrack', 'types=movie&sort_by=popularity_desc&limit=14');
+            loadRecoRow('tvPopular', 'recoTvTrack', 'types=tv_series&sort_by=popularity_desc&limit=14');
+            loadRecoRow('topRated', 'recoTopTrack', 'types=movie,tv_series&sort_by=popularity_desc&user_rating_low=80&limit=14');
+        }
 
         /* ================= OYNATICI ================= */
         function updateUI() {
