@@ -1108,15 +1108,40 @@
             return poster;
         }
 
+        // Apple'ın iTunes Arama API'si dakikada ~20 istekle sınırlı (IP başına).
+        // Sayfadaki tüm öneri kartları için aynı anda istek atmak bu sınırı hemen
+        // aşıp 403 Forbidden almamıza sebep oluyordu. Bu global "hız sınırlayıcı"
+        // istekleri sıraya koyup aralarında yeterli boşluk bırakarak (dakikada
+        // ~15 istek, güvenli marj için) gönderir.
+        let itunesQueueTail = Promise.resolve();
+        const ITUNES_MIN_INTERVAL_MS = 3500;
+        function scheduleItunesCall(fn) {
+            const run = itunesQueueTail.then(() => new Promise(resolve => {
+                setTimeout(() => resolve(fn()), ITUNES_MIN_INTERVAL_MS);
+            }));
+            // Bir sonraki çağrının bu işin bitmesini beklemesi için kuyruğu güncelle,
+            // ama bir istek başarısız olursa da kuyruk kilitlenmesin diye hatayı yut.
+            itunesQueueTail = run.catch(() => {});
+            return run;
+        }
+
         // Öneri kartları için: önce proxy'siz iTunes'u dener (en güvenilir yol),
         // bulamazsa proxy zinciriyle IMDb'ye düşer. İkisi de anahtarsız/ücretsizdir.
         async function fetchRecommendPoster(item) {
             const cacheKey = 'itunes:' + (item.imdb_id || item.id);
-            let poster = await fetchPosterFromItunes(item.title || '', item.year, (item.type || '').startsWith('tv'), true, cacheKey);
-            if (!poster && item.imdb_id) {
-                poster = await fetchPosterFromImdbOnly(item.imdb_id, true);
+            if (posterCacheMem[cacheKey] !== undefined) {
+                const cached = posterCacheMem[cacheKey];
+                if (cached) return cached;
+            } else {
+                const poster = await scheduleItunesCall(() =>
+                    fetchPosterFromItunes(item.title || '', item.year, (item.type || '').startsWith('tv'), true, cacheKey)
+                );
+                if (poster) return poster;
             }
-            return poster;
+            if (item.imdb_id) {
+                return await fetchPosterFromImdbOnly(item.imdb_id, true);
+            }
+            return '';
         }
 
         /* ================= GEÇMİŞ ================= */
@@ -1781,8 +1806,26 @@
             await Promise.all(workers);
         }
 
+        // Kart ekranda görünmeden afiş isteği atmayı önler: hem gereksiz istekleri
+        // (kullanıcı hiç aşağı kaydırmayabilir) engeller hem de iTunes'un dakikalık
+        // istek sınırına (~20/dk) bir anda tüm grid için değil, kullanıcı kaydırdıkça
+        // kademeli şekilde yaklaşmamızı sağlar.
+        let recommendPosterObserver = null;
+        function getRecommendPosterObserver() {
+            if (recommendPosterObserver) return recommendPosterObserver;
+            recommendPosterObserver = new IntersectionObserver((entries, obs) => {
+                entries.forEach(entry => {
+                    if (!entry.isIntersecting) return;
+                    obs.unobserve(entry.target);
+                    const loadFn = entry.target._loadPoster;
+                    if (loadFn) loadFn();
+                });
+            }, { rootMargin: '200px' });
+            return recommendPosterObserver;
+        }
+
         function attachRecommendCardHandlers(titles) {
-            const posterTasks = [];
+            const observer = getRecommendPosterObserver();
             titles.forEach(item => {
                 const card = document.querySelector(`.poster-card[data-wm-id="${item.id}"]`);
                 if (!card) return;
@@ -1802,23 +1845,25 @@
                 // Afişi hem Watchmode hem OMDb kotasını hiç kullanmadan yükle: önce
                 // proxy'ye ihtiyaç duymayan iTunes API'sini dener (bazı ağlarda CORS
                 // proxy'leri engellense bile çalışır), olmazsa IMDb'nin anahtarsız
-                // servisine düşer. İkisi de ortak afiş önbelleğine yazılır.
+                // servisine düşer. Kart ekrana girmeden istek atılmaz.
                 if (item.imdb_id || item.title) {
                     const wrap = card.querySelector('.poster-img-wrap');
-                    posterTasks.push(() => fetchRecommendPoster(item).then(poster => {
-                        if (!poster || !wrap) return;
-                        const placeholder = wrap.querySelector('.poster-placeholder');
-                        if (placeholder) {
-                            const img = document.createElement('img');
-                            img.src = poster;
-                            img.alt = '';
-                            img.loading = 'lazy';
-                            wrap.replaceChild(img, placeholder);
-                        }
-                    }));
+                    card._loadPoster = () => {
+                        fetchRecommendPoster(item).then(poster => {
+                            if (!poster || !wrap) return;
+                            const placeholder = wrap.querySelector('.poster-placeholder');
+                            if (placeholder) {
+                                const img = document.createElement('img');
+                                img.src = poster;
+                                img.alt = '';
+                                img.loading = 'lazy';
+                                wrap.replaceChild(img, placeholder);
+                            }
+                        }).catch(() => { /* afiş bulunamadı, placeholder kalsın */ });
+                    };
+                    observer.observe(card);
                 }
             });
-            runWithConcurrency(posterTasks, 3);
         }
 
         document.getElementById('recommendLoadMoreBtn').addEventListener('click', () => {
