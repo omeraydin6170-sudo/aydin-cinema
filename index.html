@@ -1483,31 +1483,34 @@
            Anahtar bu cihazda localStorage'a kaydedilir, sunucuya gönderilmez.
         */
         const WATCHMODE_BASE = 'https://api.watchmode.com/v1';
+        // Varsayılan olarak gömülü Watchmode API anahtarı (OMDb anahtarıyla aynı mantık).
+        // Kullanıcı kendi anahtarını girerse (localStorage'a kaydedilir) o öncelikli olur.
+        const DEFAULT_WATCHMODE_KEY = '5MEhpr2fYZIXBJjBmlHFnad3KDJTAdD1t0FaTJda';
         let rmPage = 1;
         let rmTotalPages = 1;
         let rmLoading = false;
 
         function getWatchmodeApiKey() {
-            return localStorage.getItem('watchmodeApiKey') || '';
+            return localStorage.getItem('watchmodeApiKey') || DEFAULT_WATCHMODE_KEY;
         }
 
         function setupWatchmodeApiKeyHint() {
             const hint = document.getElementById('rmApiKeyHint');
             if (!hint) return;
-            const key = getWatchmodeApiKey();
-            if (key) {
-                hint.innerHTML = `<span class="dot-on"></span>Watchmode anahtarı tanımlı · <a href="#" id="rmChangeKeyLink">değiştir</a>`;
+            const custom = localStorage.getItem('watchmodeApiKey');
+            if (custom) {
+                hint.innerHTML = `<span class="dot-on"></span>Hızlı mod aktif (özel anahtar) · <a href="#" id="rmChangeKeyLink">anahtarı değiştir</a>`;
             } else {
-                hint.innerHTML = `Öneri motoru için ücretsiz bir Watchmode API anahtarı gerekir · <a href="#" id="rmChangeKeyLink">anahtar gir</a> · <a href="https://api.watchmode.com/requestApiKey" target="_blank" rel="noopener">ücretsiz anahtar al →</a>`;
+                hint.innerHTML = `<span class="dot-on"></span>Hızlı mod aktif · <a href="#" id="rmChangeKeyLink">anahtarı değiştir</a>`;
             }
             const link = document.getElementById('rmChangeKeyLink');
             if (link) link.onclick = (e) => { e.preventDefault(); promptForWatchmodeApiKey(); };
         }
 
         function promptForWatchmodeApiKey() {
-            const current = getWatchmodeApiKey();
+            const current = localStorage.getItem('watchmodeApiKey') || '';
             const key = window.prompt(
-                "Watchmode API anahtarınızı girin.\n\nÜcretsiz anahtar (kredi kartı gerekmez): https://api.watchmode.com/requestApiKey\n\n(Boş bırakıp Tamam'a basarsanız anahtar silinir)",
+                "Kendi Watchmode API anahtarınızı girmek isterseniz buraya yazın.\n\nÜcretsiz anahtar: https://api.watchmode.com/requestApiKey\n\n(Boş bırakıp Tamam'a basarsanız varsayılan anahtara döner)",
                 current
             );
             if (key === null) return;
