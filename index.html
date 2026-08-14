@@ -1020,8 +1020,7 @@
 
         // Afiş sonuçlarını localStorage'da önbelleğe alır: hem tekrar tekrar aynı isteği
         // atmayı önler hem de proxy zincirinin aşırı yüklenmesini azaltır.
-        const POSTER_CACHE_KEY = 'posterCacheV2'; // v2: eski sürüm 403/ağ hatalarını da kalıcı "bulunamadı" olarak
-        // yanlışlıkla önbelleğe yazıyordu; anahtarı değiştirerek o bozuk kayıtları otomatik geçersiz kılıyoruz.
+        const POSTER_CACHE_KEY = 'posterCacheV1';
         function readPosterCache() {
             try { return JSON.parse(localStorage.getItem(POSTER_CACHE_KEY)) || {}; }
             catch (e) { return {}; }
@@ -1050,105 +1049,17 @@
             } catch (e) { /* yavaş moda düş */ }
 
             if (!poster) {
-                poster = await fetchPosterFromImdbOnly(id, false);
+                try {
+                    const text = await proxyFetchText(`https://v2.sg.media-imdb.com/suggestion/t/${encodeURIComponent(id)}.json`);
+                    const data = JSON.parse(text);
+                    const match = (data.d || []).find(x => x.id === id);
+                    if (match && match.i && match.i.imageUrl) poster = match.i.imageUrl;
+                } catch (e) { /* poster bulunamadı */ }
             }
 
             posterCacheMem[id] = poster;
             writePosterCache(posterCacheMem);
             return poster;
-        }
-
-        // Sadece IMDb'nin (anahtarsız, ücretsiz) öneri servisinden afiş çeker.
-        // OMDb'ye hiç dokunmaz, o yüzden OMDb'nin günlük kotasını harcamaz.
-        // useCache=true iken sonucu ortak afiş önbelleğinde tutar/okur.
-        async function fetchPosterFromImdbOnly(id, useCache) {
-            if (useCache && posterCacheMem[id] !== undefined) return posterCacheMem[id];
-
-            let poster = '';
-            try {
-                const text = await proxyFetchText(`https://v2.sg.media-imdb.com/suggestion/t/${encodeURIComponent(id)}.json`);
-                const data = JSON.parse(text);
-                const match = (data.d || []).find(x => x.id === id);
-                if (match && match.i && match.i.imageUrl) poster = match.i.imageUrl;
-            } catch (e) { /* poster bulunamadı */ }
-
-            if (useCache) {
-                posterCacheMem[id] = poster;
-                writePosterCache(posterCacheMem);
-            }
-            return poster;
-        }
-
-        // Apple'ın iTunes Arama API'si anahtarsız/ücretsizdir VE tarayıcıdan doğrudan
-        // erişime izin verir (CORS proxy'ye ihtiyaç duymaz), bu yüzden bazı ağlarda
-        // corsproxy.io / allorigins.win gibi proxy servislerine erişim engellense bile
-        // (bkz. Türkiye'deki bazı ISS'lerin bu tür proxy'leri bloklaması) çalışmaya
-        // devam eder. Öneri afişleri için birincil kaynak bu.
-        async function fetchPosterFromItunes(title, year, isTv, useCache, cacheKey) {
-            if (useCache && posterCacheMem[cacheKey] !== undefined) return posterCacheMem[cacheKey];
-
-            let poster = '';
-            let requestFailed = false; // 403/ağ hatası: gerçek "bulunamadı" değil, tekrar denenebilir olmalı
-            try {
-                const media = isTv ? 'tvShow' : 'movie';
-                const url = `https://itunes.apple.com/search?term=${encodeURIComponent(title)}&media=${media}&entity=${media}&limit=1`;
-                const res = await fetch(url);
-                if (res.ok) {
-                    const data = await res.json();
-                    const match = (data.results || [])[0];
-                    if (match && match.artworkUrl100) {
-                        // 100x100'lük küçük resmi daha büyük çözünürlüğe çeviriyoruz.
-                        poster = match.artworkUrl100.replace('100x100bb', '600x600bb');
-                    }
-                } else {
-                    requestFailed = true; // 403 (rate limit) vb: sonucu kalıcı önbelleğe yazma
-                }
-            } catch (e) { requestFailed = true; /* ağ hatası: sonucu kalıcı önbelleğe yazma */ }
-
-            // Sadece gerçekten "istek başarılı ama sonuç yok" durumunu kalıcı önbelleğe
-            // yazıyoruz. Rate limit / ağ hatasında hiç yazmıyoruz ki bir sonraki
-            // ziyarette (veya birkaç saniye sonra) tekrar denenebilsin.
-            if (useCache && !requestFailed) {
-                posterCacheMem[cacheKey] = poster;
-                writePosterCache(posterCacheMem);
-            }
-            return poster;
-        }
-
-        // Apple'ın iTunes Arama API'si dakikada ~20 istekle sınırlı (IP başına).
-        // Sayfadaki tüm öneri kartları için aynı anda istek atmak bu sınırı hemen
-        // aşıp 403 Forbidden almamıza sebep oluyordu. Bu global "hız sınırlayıcı"
-        // istekleri sıraya koyup aralarında yeterli boşluk bırakarak (dakikada
-        // ~15 istek, güvenli marj için) gönderir.
-        let itunesQueueTail = Promise.resolve();
-        const ITUNES_MIN_INTERVAL_MS = 3500;
-        function scheduleItunesCall(fn) {
-            const run = itunesQueueTail.then(() => new Promise(resolve => {
-                setTimeout(() => resolve(fn()), ITUNES_MIN_INTERVAL_MS);
-            }));
-            // Bir sonraki çağrının bu işin bitmesini beklemesi için kuyruğu güncelle,
-            // ama bir istek başarısız olursa da kuyruk kilitlenmesin diye hatayı yut.
-            itunesQueueTail = run.catch(() => {});
-            return run;
-        }
-
-        // Öneri kartları için: önce proxy'siz iTunes'u dener (en güvenilir yol),
-        // bulamazsa proxy zinciriyle IMDb'ye düşer. İkisi de anahtarsız/ücretsizdir.
-        async function fetchRecommendPoster(item) {
-            const cacheKey = 'itunes:' + (item.imdb_id || item.id);
-            if (posterCacheMem[cacheKey] !== undefined) {
-                const cached = posterCacheMem[cacheKey];
-                if (cached) return cached;
-            } else {
-                const poster = await scheduleItunesCall(() =>
-                    fetchPosterFromItunes(item.title || '', item.year, (item.type || '').startsWith('tv'), true, cacheKey)
-                );
-                if (poster) return poster;
-            }
-            if (item.imdb_id) {
-                return await fetchPosterFromImdbOnly(item.imdb_id, true);
-            }
-            return '';
         }
 
         /* ================= GEÇMİŞ ================= */
@@ -1367,24 +1278,18 @@
             });
         }
 
-        async function proxyFetchText(url, timeoutMs = 6000) {
+        async function proxyFetchText(url, timeoutMs = 4000) {
             const withTimeout = (getPromise) => {
                 const controller = new AbortController();
                 const timer = setTimeout(() => controller.abort(), timeoutMs);
                 return getPromise(controller.signal).finally(() => clearTimeout(timer));
             };
 
-            // NOT: corsproxy.io 2026 itibarıyla ücretsiz katmanını sadece localhost/geliştirme
-            // ortamlarına kısıtladı, canlı (production) sitelerden isteklerini reddediyor.
-            // Bu yüzden onu listenin sonuna aldık ve daha güvenilir, hâlâ herkese açık
-            // çalışan codetabs proxy'sini öne aldık. allorigins.win ara sıra 500 dönebiliyor,
-            // o yüzden hem raw hem get varyantı ayrı denemeler olarak duruyor.
             const attempts = [
                 withTimeout(signal => fetch(url, { signal }).then(r => { if (!r.ok) throw new Error('bad'); return r.text(); })),
-                withTimeout(signal => fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`, { signal }).then(r => { if (!r.ok) throw new Error('bad'); return r.text(); })),
                 withTimeout(signal => fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, { signal }).then(r => { if (!r.ok) throw new Error('bad'); return r.text(); })),
-                withTimeout(signal => fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`, { signal }).then(r => { if (!r.ok) throw new Error('bad'); return r.json(); }).then(w => w.contents)),
-                withTimeout(signal => fetch(`https://corsproxy.io/?url=${encodeURIComponent(url)}`, { signal }).then(r => { if (!r.ok) throw new Error('bad'); return r.text(); }))
+                withTimeout(signal => fetch(`https://corsproxy.io/?url=${encodeURIComponent(url)}`, { signal }).then(r => { if (!r.ok) throw new Error('bad'); return r.text(); })),
+                withTimeout(signal => fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`, { signal }).then(r => { if (!r.ok) throw new Error('bad'); return r.json(); }).then(w => w.contents))
             ];
 
             try {
@@ -1797,42 +1702,7 @@
             }
         }
 
-        // Aynı anda çok fazla afiş isteği göndermek, ücretsiz CORS proxy'lerinin
-        // (codetabs, allorigins vb.) saniye/dakika başına istek sınırlarına takılıp
-        // hepsinin birden başarısız olmasına yol açabiliyor. Bu yüzden afişleri aynı
-        // anda en fazla `limit` kadar çekiyoruz, geri kalanı sırayla bekletiyoruz.
-        async function runWithConcurrency(tasks, limit) {
-            let cursor = 0;
-            async function worker() {
-                while (cursor < tasks.length) {
-                    const i = cursor++;
-                    try { await tasks[i](); } catch (e) { /* tekil görev hatası akışı bozmasın */ }
-                }
-            }
-            const workers = Array.from({ length: Math.min(limit, tasks.length) }, worker);
-            await Promise.all(workers);
-        }
-
-        // Kart ekranda görünmeden afiş isteği atmayı önler: hem gereksiz istekleri
-        // (kullanıcı hiç aşağı kaydırmayabilir) engeller hem de iTunes'un dakikalık
-        // istek sınırına (~20/dk) bir anda tüm grid için değil, kullanıcı kaydırdıkça
-        // kademeli şekilde yaklaşmamızı sağlar.
-        let recommendPosterObserver = null;
-        function getRecommendPosterObserver() {
-            if (recommendPosterObserver) return recommendPosterObserver;
-            recommendPosterObserver = new IntersectionObserver((entries, obs) => {
-                entries.forEach(entry => {
-                    if (!entry.isIntersecting) return;
-                    obs.unobserve(entry.target);
-                    const loadFn = entry.target._loadPoster;
-                    if (loadFn) loadFn();
-                });
-            }, { rootMargin: '200px' });
-            return recommendPosterObserver;
-        }
-
         function attachRecommendCardHandlers(titles) {
-            const observer = getRecommendPosterObserver();
             titles.forEach(item => {
                 const card = document.querySelector(`.poster-card[data-wm-id="${item.id}"]`);
                 if (!card) return;
@@ -1848,28 +1718,6 @@
                     updateUI();
                     scrollToSection('heroSection');
                 };
-
-                // Afişi hem Watchmode hem OMDb kotasını hiç kullanmadan yükle: önce
-                // proxy'ye ihtiyaç duymayan iTunes API'sini dener (bazı ağlarda CORS
-                // proxy'leri engellense bile çalışır), olmazsa IMDb'nin anahtarsız
-                // servisine düşer. Kart ekrana girmeden istek atılmaz.
-                if (item.imdb_id || item.title) {
-                    const wrap = card.querySelector('.poster-img-wrap');
-                    card._loadPoster = () => {
-                        fetchRecommendPoster(item).then(poster => {
-                            if (!poster || !wrap) return;
-                            const placeholder = wrap.querySelector('.poster-placeholder');
-                            if (placeholder) {
-                                const img = document.createElement('img');
-                                img.src = poster;
-                                img.alt = '';
-                                img.loading = 'lazy';
-                                wrap.replaceChild(img, placeholder);
-                            }
-                        }).catch(() => { /* afiş bulunamadı, placeholder kalsın */ });
-                    };
-                    observer.observe(card);
-                }
             });
         }
 
