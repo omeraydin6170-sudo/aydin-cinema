@@ -203,9 +203,9 @@
         }
         input:focus, select:focus { border-color: var(--marquee); box-shadow: 0 0 0 3px rgba(255,183,3,0.12); }
         input::placeholder { color: var(--dim-2); }
-        .tv-controls { display: none; gap: 8px; align-items: flex-end; }
-        .tv-controls .field { flex: 0 0 64px; }
-        .tv-controls input { text-align: center; padding-left: 4px; padding-right: 4px; }
+        .tv-controls { display: none; gap: 8px; align-items: flex-end; flex-wrap: wrap; min-width: 0; }
+        .tv-controls .field { flex: 1 1 64px; min-width: 0; max-width: 90px; }
+        .tv-controls input { text-align: center; padding-left: 4px; padding-right: 4px; min-width: 0; width: 100%; }
 
         button { border: none; border-radius: 9px; font-family: var(--body-font); }
         .btn-play {
@@ -1010,27 +1010,72 @@
 
         // Varsayılan olarak gömülü OMDb API anahtarı. Kullanıcı kendi anahtarını girerse
         // (localStorage'a kaydedilir) o öncelikli olur; girmezse bu varsayılan kullanılır.
-        const DEFAULT_OMDB_KEY = '7c2550ff';
+        // NOT: Bu anahtar herkesin ortak kullandığı ücretsiz bir anahtardır ve günlük istek
+        // sınırı (1000/gün) dolabilir. Afişler yüklenmiyorsa "anahtarı değiştir"den kendi
+        // ücretsiz anahtarınızı girmeniz önerilir: https://www.omdbapi.com/apikey.aspx
+        const DEFAULT_OMDB_KEY = '667c308e';
         function getOmdbApiKey() {
             return localStorage.getItem('omdbApiKey') || DEFAULT_OMDB_KEY;
         }
 
+        // Afiş sonuçlarını localStorage'da önbelleğe alır: hem tekrar tekrar aynı isteği
+        // atmayı önler hem de proxy zincirinin aşırı yüklenmesini azaltır.
+        const POSTER_CACHE_KEY = 'posterCacheV1';
+        function readPosterCache() {
+            try { return JSON.parse(localStorage.getItem(POSTER_CACHE_KEY)) || {}; }
+            catch (e) { return {}; }
+        }
+        function writePosterCache(cache) {
+            try {
+                const entries = Object.entries(cache).slice(-600); // önbellek şişmesin
+                localStorage.setItem(POSTER_CACHE_KEY, JSON.stringify(Object.fromEntries(entries)));
+            } catch (e) { /* localStorage dolu olabilir, sessizce geç */ }
+        }
+        let posterCacheMem = readPosterCache();
+
         // IMDb ID'sinden kapak resmi (poster) çözer: önce OMDb'yi dener, olmazsa IMDb'nin
         // öneri servisini (proxy zinciriyle) dener. Bulamazsa boş döner (placeholder gösterilir).
         async function fetchPosterForId(id) {
+            if (posterCacheMem[id] !== undefined) return posterCacheMem[id];
+
             const apiKey = getOmdbApiKey();
+            let poster = '';
             try {
                 const res = await fetch(`https://www.omdbapi.com/?apikey=${encodeURIComponent(apiKey)}&i=${encodeURIComponent(id)}`);
-                const data = await res.json();
-                if (data && data.Poster && data.Poster !== 'N/A') return data.Poster;
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.Poster && data.Poster !== 'N/A') poster = data.Poster;
+                }
             } catch (e) { /* yavaş moda düş */ }
+
+            if (!poster) {
+                poster = await fetchPosterFromImdbOnly(id, false);
+            }
+
+            posterCacheMem[id] = poster;
+            writePosterCache(posterCacheMem);
+            return poster;
+        }
+
+        // Sadece IMDb'nin (anahtarsız, ücretsiz) öneri servisinden afiş çeker.
+        // OMDb'ye hiç dokunmaz, o yüzden OMDb'nin günlük kotasını harcamaz.
+        // useCache=true iken sonucu ortak afiş önbelleğinde tutar/okur.
+        async function fetchPosterFromImdbOnly(id, useCache) {
+            if (useCache && posterCacheMem[id] !== undefined) return posterCacheMem[id];
+
+            let poster = '';
             try {
                 const text = await proxyFetchText(`https://v2.sg.media-imdb.com/suggestion/t/${encodeURIComponent(id)}.json`);
                 const data = JSON.parse(text);
                 const match = (data.d || []).find(x => x.id === id);
-                if (match && match.i && match.i.imageUrl) return match.i.imageUrl;
+                if (match && match.i && match.i.imageUrl) poster = match.i.imageUrl;
             } catch (e) { /* poster bulunamadı */ }
-            return '';
+
+            if (useCache) {
+                posterCacheMem[id] = poster;
+                writePosterCache(posterCacheMem);
+            }
+            return poster;
         }
 
         /* ================= GEÇMİŞ ================= */
@@ -1324,8 +1369,8 @@
                     renderOmdbResults(results, resultsBox);
                     return;
                 }
-                resultsBox.innerHTML = `<div class="search-status">Sonuç bulunamadı.</div>`;
-                return;
+                // OMDb geçerli şekilde yanıt verdi ama eşleşme bulamadı: yine de IMDb öneri
+                // servisini deneyelim, bazen orada eşleşme çıkabiliyor. Aşağı devam ediyoruz.
             } catch (err) {
                 if (err && err.invalidKey && localStorage.getItem('omdbApiKey')) {
                     // Sadece kullanıcının kendi eklediği özel anahtar geçersizse temizle, varsayılana dön
@@ -1334,8 +1379,11 @@
                     resultsBox.innerHTML = `<div class="search-status">Özel anahtar geçersiz, varsayılana dönüldü. Tekrar yazın.</div>`;
                     return;
                 }
-                // apiKey tamamen başarısızsa (ağ sorunu vb.) yavaş moda düş
+                // OMDb tamamen başarısızsa (kota doldu, ağ sorunu vb.) yavaş moda düş
             }
+
+            if (mySeq !== imdbSearchSeq) return;
+            resultsBox.innerHTML = `<div class="search-status">Yedek kaynaktan aranıyor...</div>`;
 
             try {
                 const data = await fetchImdbSuggestions(query);
@@ -1543,31 +1591,55 @@
             }
         }
 
+        const WATCHMODE_GENRE_CACHE_KEY = 'watchmodeGenreCacheV1';
+        const WATCHMODE_GENRE_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 gün
+
+        function populateGenreSelect(select, list) {
+            list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+            list.forEach(g => {
+                const opt = document.createElement('option');
+                opt.value = g.id;
+                opt.textContent = g.name;
+                select.appendChild(opt);
+            });
+        }
+
         async function loadWatchmodeGenres() {
             const select = document.getElementById('rmGenre');
             if (!select || !getWatchmodeApiKey()) return;
+
+            // Önce localStorage önbelleğine bak; varsa ve süresi dolmamışsa
+            // API'ye hiç istek atmadan oradan doldur (kota harcamaz).
+            try {
+                const cachedRaw = localStorage.getItem(WATCHMODE_GENRE_CACHE_KEY);
+                if (cachedRaw) {
+                    const cached = JSON.parse(cachedRaw);
+                    if (cached && Array.isArray(cached.list) && cached.list.length &&
+                        (Date.now() - cached.ts) < WATCHMODE_GENRE_CACHE_TTL_MS) {
+                        populateGenreSelect(select, cached.list.slice());
+                        return;
+                    }
+                }
+            } catch (e) { /* bozuk önbellek, yok say */ }
+
             try {
                 const data = await watchmodeFetchJson('/genres/', {});
                 const list = Array.isArray(data) ? data : (data.genres || []);
                 if (!list.length) return;
-                list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-                list.forEach(g => {
-                    const opt = document.createElement('option');
-                    opt.value = g.id;
-                    opt.textContent = g.name;
-                    select.appendChild(opt);
-                });
+                try {
+                    localStorage.setItem(WATCHMODE_GENRE_CACHE_KEY, JSON.stringify({ ts: Date.now(), list }));
+                } catch (e) { /* localStorage dolu olabilir, sessizce geç */ }
+                populateGenreSelect(select, list.slice());
             } catch (e) { /* tür listesi opsiyonel, sessizce geç */ }
         }
 
         function recommendCardMarkup(item) {
             const isTv = (item.type || '').startsWith('tv');
             const year = item.year ? item.year : '';
-            const posterInner = `<div class="poster-placeholder" data-poster-slot="${item.id}"><svg class="icon"><use href="#ic-film"/></svg></div>`;
             return `
                 <div class="poster-card" data-wm-id="${item.id}" data-imdb-id="${item.imdb_id || ''}" data-title="${escapeHtml(item.title || '')}" data-type="${isTv ? 'tv' : 'movie'}" tabindex="0" role="button" aria-label="${escapeHtml(item.title || '')}">
-                    <div class="poster-img-wrap" id="rmPoster-${item.id}">
-                        ${posterInner}
+                    <div class="poster-img-wrap">
+                        <div class="poster-placeholder"><svg class="icon"><use href="#ic-film"/></svg></div>
                         <span class="poster-badge ${isTv ? 'tv' : 'movie'}">${isTv ? 'DİZİ' : 'FİLM'}</span>
                         <div class="poster-play"><svg class="icon"><use href="#ic-play"/></svg></div>
                         <div class="poster-overlay">
@@ -1626,7 +1698,6 @@
                         grid.insertAdjacentHTML('beforeend', recommendCardMarkup(item));
                     });
                     attachRecommendCardHandlers(titles);
-                    lazyLoadRecommendPosters(titles);
                 }
 
                 loadMoreWrap.style.display = (rmPage < rmTotalPages) ? 'flex' : 'none';
@@ -1659,40 +1730,30 @@
                     document.getElementById('mName').value = item.title || '';
                     document.getElementById('mType').value = card.dataset.type;
                     document.getElementById('mId').value = item.imdb_id;
-                    const posterImg = document.querySelector(`#rmPoster-${item.id} img`);
-                    document.getElementById('mPoster').value = posterImg ? posterImg.src : '';
+                    document.getElementById('mPoster').value = '';
                     updateUI();
                     scrollToSection('heroSection');
                 };
+
+                // Afişi hem Watchmode hem OMDb kotasını hiç kullanmadan yükle: sadece
+                // IMDb'nin anahtarsız/ücretsiz öneri servisinden (fetchPosterFromImdbOnly)
+                // çekiliyor ve ortak afiş önbelleğine yazılıyor, o yüzden aynı filmin
+                // afişini tekrar tekrar çekmek de bedava.
+                if (item.imdb_id) {
+                    const wrap = card.querySelector('.poster-img-wrap');
+                    fetchPosterFromImdbOnly(item.imdb_id, true).then(poster => {
+                        if (!poster || !wrap) return;
+                        const placeholder = wrap.querySelector('.poster-placeholder');
+                        if (placeholder) {
+                            const img = document.createElement('img');
+                            img.src = poster;
+                            img.alt = '';
+                            img.loading = 'lazy';
+                            wrap.replaceChild(img, placeholder);
+                        }
+                    }).catch(() => { /* afiş bulunamadı, placeholder kalsın */ });
+                }
             });
-        }
-
-        // Poster resimlerini kartlar ekrana geldikten sonra OMDb üzerinden tek tek doldurur
-        // (Watchmode liste uç noktası poster döndürmüyor, bu yüzden mevcut OMDb altyapısı kullanılıyor).
-        function lazyLoadRecommendPosters(titles) {
-            const withImdb = titles.filter(t => t.imdb_id);
-            if (!withImdb.length) return;
-
-            const slots = withImdb.map(t => document.getElementById(`rmPoster-${t.id}`)).filter(Boolean);
-            const io = new IntersectionObserver((entries, observer) => {
-                entries.forEach(async (entry) => {
-                    if (!entry.isIntersecting) return;
-                    observer.unobserve(entry.target);
-                    const wmId = entry.target.id.replace('rmPoster-', '');
-                    const item = withImdb.find(t => String(t.id) === wmId);
-                    if (!item) return;
-                    const poster = await fetchPosterForId(item.imdb_id);
-                    if (!poster) return;
-                    const placeholder = entry.target.querySelector('.poster-placeholder');
-                    if (placeholder) {
-                        const img = document.createElement('img');
-                        img.src = poster; img.alt = ''; img.loading = 'lazy';
-                        placeholder.replaceWith(img);
-                    }
-                });
-            }, { rootMargin: '200px' });
-
-            slots.forEach(s => io.observe(s));
         }
 
         document.getElementById('recommendLoadMoreBtn').addEventListener('click', () => {
