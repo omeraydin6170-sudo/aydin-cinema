@@ -1702,9 +1702,9 @@
             }
         }
 
-        // ---- Öneri kartları için afişler: sadece diziler, TVmaze üzerinden ----
-        // Filmler için henüz güvenilir/anahtarsız bir kaynak yok, o kısım şimdilik
-        // placeholder ikonla bırakılıyor (kullanıcı başka bir çözüme karar verecek).
+        // ---- Öneri kartları için afişler ----
+        // Diziler: TVmaze (anahtarsız). Filmler: Watchmode'un verdiği IMDb ID ile
+        // OMDb + IMDb proxy fallback zinciri (fetchPosterForId, geçmiş kısmıyla ortak).
         // Genel amaçlı, tüm afiş kaynakları için ortak kullanılan basit localStorage
         // önbellek yardımcıları (kaynağa göre ayrı anahtar altında tutulur).
         function readSimpleCache(key) {
@@ -1758,12 +1758,34 @@
             return poster;
         }
 
+        // ---- Filmler için: IMDb suggestion API, doğrudan (OMDb'ye hiç dokunmadan) ----
+        // Öneri ızgarası kayan listeyle onlarca kart yükleyebildiği için OMDb'nin günlük
+        // 1000 istek kotasını hızla tüketebilir. Bunun yerine anahtarsız ve limitsiz olan
+        // IMDb suggestion uç noktasını, geçmiş/afiş çözümlemesinde de kullanılan proxy
+        // yarışıyla (proxyFetchText → Promise.any) doğrudan kullanıyoruz. Sonuç, geçmiş
+        // kısmıyla aynı önbellekte (posterCacheV1) id bazlı tutuluyor, tekrar istek atılmıyor.
+        async function fetchPosterFromImdbSuggestionOnly(id) {
+            if (posterCacheMem[id] !== undefined) return posterCacheMem[id];
+            let poster = '';
+            try {
+                const text = await proxyFetchText(`https://v2.sg.media-imdb.com/suggestion/t/${encodeURIComponent(id)}.json`);
+                const data = JSON.parse(text);
+                const match = (data.d || []).find(x => x.id === id);
+                if (match && match.i && match.i.imageUrl) poster = match.i.imageUrl;
+                posterCacheMem[id] = poster;
+                writePosterCache(posterCacheMem);
+            } catch (e) { /* ağ/proxy hatası: kalıcı önbelleğe yazma, tekrar denensin */ }
+            return poster;
+        }
+
         // ---- Öneri kartı için afiş çözümleme ----
-        // Sadece diziler için TVmaze deneniyor. Filmler şimdilik placeholder'da kalıyor.
+        // Diziler: TVmaze (anahtarsız, limitsiz). Filmler: IMDb suggestion API, doğrudan
+        // (OMDb kotası hiç harcanmaz).
         async function fetchRecommendPoster(item) {
             const isTv = (item.type || '').startsWith('tv');
-            if (!isTv) return '';
-            return await fetchPosterFromTvmaze(item.title || '');
+            if (isTv) return await fetchPosterFromTvmaze(item.title || '');
+            if (!item.imdb_id) return '';
+            return await fetchPosterFromImdbSuggestionOnly(item.imdb_id);
         }
 
         // Artık kullanılmayan eski Wikipedia/Wikidata önbelleklerini temizle (bir kere).
