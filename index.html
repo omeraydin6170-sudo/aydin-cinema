@@ -1764,11 +1764,29 @@
         // IMDb suggestion uç noktasını, geçmiş/afiş çözümlemesinde de kullanılan proxy
         // yarışıyla (proxyFetchText → Promise.any) doğrudan kullanıyoruz. Sonuç, geçmiş
         // kısmıyla aynı önbellekte (posterCacheV1) id bazlı tutuluyor, tekrar istek atılmıyor.
+        //
+        // Not: IntersectionObserver sayfa açılır açılmaz ekranda görünen tüm kartları
+        // (10-15 tane) aynı anda tetikleyebiliyor. Bunların hepsi aynı anda proxy'lere
+        // (allorigins, corsproxy.io vb.) istek atarsa, bu ücretsiz servisler dakikalık
+        // istek limitine hemen takılıp 429 dönmeye başlıyor — "ilk başta çalışıp sonra
+        // durması" bundan kaynaklanıyor. TVmaze kuyruğunda olduğu gibi burada da istekleri
+        // aralıklandırıyoruz ki proxy'ler bloklanmasın.
+        let imdbSuggestQueueTail = Promise.resolve();
+        const IMDB_SUGGEST_MIN_INTERVAL_MS = 450;
+        function scheduleImdbSuggestFetch(id) {
+            const run = imdbSuggestQueueTail.then(() => new Promise(resolve => {
+                setTimeout(() => resolve(
+                    proxyFetchText(`https://v2.sg.media-imdb.com/suggestion/t/${encodeURIComponent(id)}.json`)
+                ), IMDB_SUGGEST_MIN_INTERVAL_MS);
+            }));
+            imdbSuggestQueueTail = run.catch(() => {});
+            return run;
+        }
         async function fetchPosterFromImdbSuggestionOnly(id) {
             if (posterCacheMem[id] !== undefined) return posterCacheMem[id];
             let poster = '';
             try {
-                const text = await proxyFetchText(`https://v2.sg.media-imdb.com/suggestion/t/${encodeURIComponent(id)}.json`);
+                const text = await scheduleImdbSuggestFetch(id);
                 const data = JSON.parse(text);
                 const match = (data.d || []).find(x => x.id === id);
                 if (match && match.i && match.i.imageUrl) poster = match.i.imageUrl;
