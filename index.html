@@ -1702,7 +1702,74 @@
             }
         }
 
+        // ---- Öneri kartları için afişler: Wikipedia üzerinden, anahtarsız/proxysiz ----
+        // Wikipedia'nın MediaWiki API'si `origin=*` parametresiyle çağrıldığında CORS'a
+        // izin veriyor, yani hiçbir CORS proxy'sine ihtiyaç duymuyoruz (Türkiye'deki bazı
+        // ağların proxy servislerini engellemesi burada sorun olmuyor). Anahtar da
+        // gerekmiyor, bu yüzden ne Watchmode ne OMDb kotasına dokunuyor. Dezavantajı:
+        // bazı (özellikle çok yeni veya az bilinen) yapımlar için sayfa/görsel
+        // bulunamayabilir; o durumda placeholder ikon kalır.
+        const WIKI_POSTER_CACHE_KEY = 'wikiPosterCacheV1';
+        function readWikiPosterCache() {
+            try { return JSON.parse(localStorage.getItem(WIKI_POSTER_CACHE_KEY)) || {}; }
+            catch (e) { return {}; }
+        }
+        function writeWikiPosterCache(cache) {
+            try {
+                const entries = Object.entries(cache).slice(-500); // önbellek şişmesin
+                localStorage.setItem(WIKI_POSTER_CACHE_KEY, JSON.stringify(Object.fromEntries(entries)));
+            } catch (e) { /* localStorage dolu olabilir, sessizce geç */ }
+        }
+        let wikiPosterCacheMem = readWikiPosterCache();
+
+        async function fetchPosterFromWikipedia(title, year, isTv) {
+            const cacheKey = `${title}::${year || ''}::${isTv ? 'tv' : 'movie'}`;
+            if (wikiPosterCacheMem[cacheKey] !== undefined) return wikiPosterCacheMem[cacheKey];
+
+            let poster = '';
+            try {
+                // Arama sorgusuna "film"/"dizi" eklemek Wikipedia'nın doğru sayfayı
+                // (aynı isimli başka şeylerle karışmadan) bulmasına yardımcı oluyor.
+                const bias = isTv ? 'TV series' : 'film';
+                const query = year ? `${title} ${year} ${bias}` : `${title} ${bias}`;
+                const url = `https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrlimit=1&prop=pageimages&piprop=thumbnail&pithumbsize=600&format=json&origin=*`;
+                const res = await fetch(url);
+                if (res.ok) {
+                    const data = await res.json();
+                    const pages = data && data.query && data.query.pages;
+                    if (pages) {
+                        const page = Object.values(pages)[0];
+                        if (page && page.thumbnail && page.thumbnail.source) {
+                            poster = page.thumbnail.source;
+                        }
+                    }
+                }
+            } catch (e) { /* Wikipedia'da bulunamadı, placeholder kalsın */ }
+
+            wikiPosterCacheMem[cacheKey] = poster;
+            writeWikiPosterCache(wikiPosterCacheMem);
+            return poster;
+        }
+
+        // Kart ekranda görünmeden afiş isteği atmamak için IntersectionObserver
+        // kullanıyoruz: kullanıcı aşağı kaydırmadıkça görünmeyen kartlar için hiç
+        // istek gitmiyor, gereksiz yere Wikipedia'ya yüklenmiyoruz.
+        let recommendPosterObserver = null;
+        function getRecommendPosterObserver() {
+            if (recommendPosterObserver) return recommendPosterObserver;
+            recommendPosterObserver = new IntersectionObserver((entries, obs) => {
+                entries.forEach(entry => {
+                    if (!entry.isIntersecting) return;
+                    obs.unobserve(entry.target);
+                    const loadFn = entry.target._loadPoster;
+                    if (loadFn) loadFn();
+                });
+            }, { rootMargin: '200px' });
+            return recommendPosterObserver;
+        }
+
         function attachRecommendCardHandlers(titles) {
+            const observer = getRecommendPosterObserver();
             titles.forEach(item => {
                 const card = document.querySelector(`.poster-card[data-wm-id="${item.id}"]`);
                 if (!card) return;
@@ -1718,6 +1785,22 @@
                     updateUI();
                     scrollToSection('heroSection');
                 };
+
+                const wrap = card.querySelector('.poster-img-wrap');
+                card._loadPoster = () => {
+                    fetchPosterFromWikipedia(item.title || '', item.year, (item.type || '').startsWith('tv')).then(poster => {
+                        if (!poster || !wrap) return;
+                        const placeholder = wrap.querySelector('.poster-placeholder');
+                        if (placeholder) {
+                            const img = document.createElement('img');
+                            img.src = poster;
+                            img.alt = '';
+                            img.loading = 'lazy';
+                            wrap.replaceChild(img, placeholder);
+                        }
+                    }).catch(() => { /* afiş bulunamadı, placeholder kalsın */ });
+                };
+                observer.observe(card);
             });
         }
 
