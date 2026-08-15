@@ -1709,7 +1709,7 @@
         // gerekmiyor, bu yüzden ne Watchmode ne OMDb kotasına dokunuyor. Dezavantajı:
         // bazı (özellikle çok yeni veya az bilinen) yapımlar için sayfa/görsel
         // bulunamayabilir; o durumda placeholder ikon kalır.
-        const WIKI_POSTER_CACHE_KEY = 'wikiPosterCacheV1';
+        const WIKI_POSTER_CACHE_KEY = 'wikiPosterCacheV2'; // v2: arama sorgusu iyileştirildi, eski (yanlış negatif) kayıtları geçersiz kılmak için sürüm arttırıldı
         function readWikiPosterCache() {
             try { return JSON.parse(localStorage.getItem(WIKI_POSTER_CACHE_KEY)) || {}; }
             catch (e) { return {}; }
@@ -1727,24 +1727,40 @@
             if (wikiPosterCacheMem[cacheKey] !== undefined) return wikiPosterCacheMem[cacheKey];
 
             let poster = '';
+
+            // 1) Önce doğrudan başlık eşleşmesi dene: Wikipedia'nın kendi yönlendirme
+            // (redirect) çözümünü kullanır, bu yüzden bilinen başlıklar için arama
+            // tabanlı yöntemden çok daha isabetlidir (yanlış alt sayfaya düşmez).
             try {
-                // Arama sorgusuna "film"/"dizi" eklemek Wikipedia'nın doğru sayfayı
-                // (aynı isimli başka şeylerle karışmadan) bulmasına yardımcı oluyor.
-                const bias = isTv ? 'TV series' : 'film';
-                const query = year ? `${title} ${year} ${bias}` : `${title} ${bias}`;
-                const url = `https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrlimit=1&prop=pageimages&piprop=thumbnail&pithumbsize=600&format=json&origin=*`;
-                const res = await fetch(url);
-                if (res.ok) {
-                    const data = await res.json();
-                    const pages = data && data.query && data.query.pages;
-                    if (pages) {
-                        const page = Object.values(pages)[0];
-                        if (page && page.thumbnail && page.thumbnail.source) {
-                            poster = page.thumbnail.source;
-                        }
+                const url1 = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(title)}&prop=pageimages&piprop=thumbnail&pithumbsize=600&redirects=1&format=json&origin=*`;
+                const res1 = await fetch(url1);
+                if (res1.ok) {
+                    const data1 = await res1.json();
+                    const pages1 = data1 && data1.query && data1.query.pages;
+                    if (pages1) {
+                        const page1 = Object.values(pages1)[0];
+                        if (page1 && page1.thumbnail && page1.thumbnail.source) poster = page1.thumbnail.source;
                     }
                 }
-            } catch (e) { /* Wikipedia'da bulunamadı, placeholder kalsın */ }
+            } catch (e) { /* devam, arama tabanlı yönteme düş */ }
+
+            // 2) Bulunamadıysa (başlık tam eşleşmediyse) arama tabanlı yedek yöntem.
+            if (!poster) {
+                try {
+                    const bias = isTv ? 'TV series' : 'film';
+                    const query = `${title} ${bias}`;
+                    const url2 = `https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrlimit=1&prop=pageimages&piprop=thumbnail&pithumbsize=600&format=json&origin=*`;
+                    const res2 = await fetch(url2);
+                    if (res2.ok) {
+                        const data2 = await res2.json();
+                        const pages2 = data2 && data2.query && data2.query.pages;
+                        if (pages2) {
+                            const page2 = Object.values(pages2)[0];
+                            if (page2 && page2.thumbnail && page2.thumbnail.source) poster = page2.thumbnail.source;
+                        }
+                    }
+                } catch (e) { /* Wikipedia'da bulunamadı, placeholder kalsın */ }
+            }
 
             wikiPosterCacheMem[cacheKey] = poster;
             writeWikiPosterCache(wikiPosterCacheMem);
