@@ -663,6 +663,7 @@
                 </button>
             </div>
             <div id="rmApiKeyHint" class="api-key-hint"></div>
+            <div id="rmFanartKeyHint" class="api-key-hint"></div>
 
             <div id="recommendGrid" class="recommend-grid"></div>
 
@@ -959,6 +960,7 @@
             renderAccountPanel();
             updateAccountNavIcon();
             setupWatchmodeApiKeyHint();
+            setupFanartApiKeyHint();
             loadWatchmodeGenres();
         };
 
@@ -1758,12 +1760,100 @@
             return poster;
         }
 
+        // ---- Filmler için: Fanart.tv API ----
+        // Anahtar gerektiriyor (ücretsiz, kişisel hesap üzerinden alınıyor:
+        // https://fanart.tv/get-an-api-key/). IMDb ID üzerinden sorgulanıyor,
+        // bu yüzden "aynı isimli film" karışıklığı yaşanmıyor (dizilerde TVmaze'de
+        // olduğu gibi). Anahtar bu cihazda localStorage'a kaydedilir, sunucuya
+        // gönderilmez. Rate limit anahtarsız/proje anahtarıyla düşük olduğundan
+        // TVmaze'dekiyle aynı mantıkla sıraya alınıyor.
+        const FANART_BASE = 'https://webservice.fanart.tv/v3/movies';
+        const FANART_CACHE_KEY = 'fanartPosterCacheV1';
+        let fanartCacheMem = readSimpleCache(FANART_CACHE_KEY);
+        let fanartQueueTail = Promise.resolve();
+        const FANART_MIN_INTERVAL_MS = 350;
+        // Varsayılan olarak gömülü Fanart.tv API anahtarı (OMDb/Watchmode anahtarlarıyla aynı mantık).
+        // Kullanıcı kendi anahtarını girerse (localStorage'a kaydedilir) o öncelikli olur.
+        const DEFAULT_FANART_KEY = '10f634c4f606312b998823a13e1990f9';
+
+        function getFanartApiKey() {
+            return localStorage.getItem('fanartApiKey') || DEFAULT_FANART_KEY;
+        }
+
+        function setupFanartApiKeyHint() {
+            const hint = document.getElementById('rmFanartKeyHint');
+            if (!hint) return;
+            const custom = localStorage.getItem('fanartApiKey');
+            if (custom) {
+                hint.innerHTML = `<span class="dot-on"></span>Film afişleri: Fanart.tv aktif (özel anahtar) · <a href="#" id="rmFanartKeyLink">anahtarı değiştir</a>`;
+            } else {
+                hint.innerHTML = `<span class="dot-on"></span>Film afişleri: Fanart.tv aktif · <a href="#" id="rmFanartKeyLink">anahtarı değiştir</a>`;
+            }
+            const link = document.getElementById('rmFanartKeyLink');
+            if (link) link.onclick = (e) => { e.preventDefault(); promptForFanartApiKey(); };
+        }
+
+        function promptForFanartApiKey() {
+            const current = localStorage.getItem('fanartApiKey') || '';
+            const key = window.prompt(
+                "Kendi Fanart.tv API anahtarınızı girmek isterseniz buraya yazın.\n\nÜcretsiz anahtar: https://fanart.tv/get-an-api-key/ (hesap açıp 'Personal API Key' isteyin)\n\n(Boş bırakıp Tamam'a basarsanız varsayılan anahtara döner)",
+                current
+            );
+            if (key === null) return;
+            if (key.trim() === '') localStorage.removeItem('fanartApiKey');
+            else localStorage.setItem('fanartApiKey', key.trim());
+            setupFanartApiKeyHint();
+            // Anahtar değiştiğinde eski önbellek yanlış/boş sonuçlar içerebilir, temizle.
+            fanartCacheMem = {};
+            writeSimpleCache(FANART_CACHE_KEY, fanartCacheMem);
+        }
+
+        function scheduleFanartFetch(url) {
+            const run = fanartQueueTail.then(() => new Promise(resolve => {
+                setTimeout(() => resolve(fetch(url)), FANART_MIN_INTERVAL_MS);
+            }));
+            fanartQueueTail = run.catch(() => {});
+            return run;
+        }
+
+        async function fetchPosterFromFanart(imdbId) {
+            if (!imdbId) return '';
+            const apiKey = getFanartApiKey();
+            if (!apiKey) return '';
+            if (fanartCacheMem[imdbId] !== undefined) return fanartCacheMem[imdbId];
+            let poster = '';
+            let anySuccess = false;
+            try {
+                const url = `${FANART_BASE}/${encodeURIComponent(imdbId)}?api_key=${encodeURIComponent(apiKey)}`;
+                const res = await scheduleFanartFetch(url);
+                if (res.ok) {
+                    anySuccess = true;
+                    const data = await res.json();
+                    if (data && Array.isArray(data.movieposter) && data.movieposter.length) {
+                        // En çok beğenilen (likes) afişi tercih et
+                        const sorted = [...data.movieposter].sort((a, b) => (Number(b.likes) || 0) - (Number(a.likes) || 0));
+                        poster = sorted[0].url || '';
+                    }
+                } else if (res.status === 404) {
+                    anySuccess = true; // gerçek "bulunamadı" sonucu
+                } else if (res.status === 401 || res.status === 403) {
+                    // geçersiz anahtar: kalıcı önbelleğe yazma, kullanıcı anahtarı düzeltebilsin
+                }
+                // diğer hatalar (429 vb.) geçici olabilir, kalıcı önbelleğe yazma
+            } catch (e) { /* ağ hatası: kalıcı önbelleğe yazma */ }
+            if (anySuccess) {
+                fanartCacheMem[imdbId] = poster;
+                writeSimpleCache(FANART_CACHE_KEY, fanartCacheMem);
+            }
+            return poster;
+        }
+
         // ---- Öneri kartı için afiş çözümleme ----
-        // Sadece diziler için TVmaze deneniyor. Filmler şimdilik placeholder'da kalıyor.
+        // Diziler için TVmaze, filmler için Fanart.tv (IMDb ID ile) deneniyor.
         async function fetchRecommendPoster(item) {
             const isTv = (item.type || '').startsWith('tv');
-            if (!isTv) return '';
-            return await fetchPosterFromTvmaze(item.title || '');
+            if (isTv) return await fetchPosterFromTvmaze(item.title || '');
+            return await fetchPosterFromFanart(item.imdb_id || '');
         }
 
         // Artık kullanılmayan eski Wikipedia/Wikidata önbelleklerini temizle (bir kere).
