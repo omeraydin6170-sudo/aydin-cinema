@@ -1722,6 +1722,73 @@
         }
         let wikiPosterCacheMem = readWikiPosterCache();
 
+        // Genel amaçlı, tüm afiş kaynakları için ortak kullanılan basit localStorage
+        // önbellek yardımcıları (kaynağa göre ayrı anahtar altında tutulur).
+        function readSimpleCache(key) {
+            try { return JSON.parse(localStorage.getItem(key)) || {}; }
+            catch (e) { return {}; }
+        }
+        function writeSimpleCache(key, cache) {
+            try {
+                const entries = Object.entries(cache).slice(-500);
+                localStorage.setItem(key, JSON.stringify(Object.fromEntries(entries)));
+            } catch (e) { /* localStorage dolu olabilir, sessizce geç */ }
+        }
+
+        // ---- Diziler için: TVmaze API ----
+        // Anahtarsız, tamamen CORS'a açık (Türkiye'deki proxy engellerinden etkilenmiyor),
+        // dizilere özel bir veritabanı olduğu için "aynı isimli film" karışıklığı da
+        // yaşanmıyor. 10 saniyede ~20 istek sınırı var, bu yüzden burada da sıraya alıyoruz.
+        const TVMAZE_CACHE_KEY = 'tvmazePosterCacheV1';
+        let tvmazeCacheMem = readSimpleCache(TVMAZE_CACHE_KEY);
+        let tvmazeQueueTail = Promise.resolve();
+        const TVMAZE_MIN_INTERVAL_MS = 350;
+        function scheduleTvmazeFetch(url) {
+            const run = tvmazeQueueTail.then(() => new Promise(resolve => {
+                setTimeout(() => resolve(fetch(url)), TVMAZE_MIN_INTERVAL_MS);
+            }));
+            tvmazeQueueTail = run.catch(() => {});
+            return run;
+        }
+        async function fetchPosterFromTvmaze(title) {
+            if (tvmazeCacheMem[title] !== undefined) return tvmazeCacheMem[title];
+            let poster = '';
+            let anySuccess = false;
+            try {
+                const url = `https://api.tvmaze.com/singlesearch/shows?q=${encodeURIComponent(title)}`;
+                const res = await scheduleTvmazeFetch(url);
+                if (res.ok) {
+                    anySuccess = true;
+                    const data = await res.json();
+                    if (data && data.image && (data.image.original || data.image.medium)) {
+                        poster = data.image.original || data.image.medium;
+                    }
+                } else if (res.status !== 404) {
+                    // 404 = gerçekten bulunamadı (kalıcı önbelleğe yazılabilir);
+                    // diğer hatalar (429 vb.) geçici olabilir, yazma.
+                } else {
+                    anySuccess = true; // 404: gerçek "bulunamadı" sonucu
+                }
+            } catch (e) { /* ağ hatası: kalıcı önbelleğe yazma */ }
+            if (anySuccess) {
+                tvmazeCacheMem[title] = poster;
+                writeSimpleCache(TVMAZE_CACHE_KEY, tvmazeCacheMem);
+            }
+            return poster;
+        }
+
+        // ---- Öneri kartı için birleşik afiş çözümleme ----
+        // Diziler: TVmaze → Wikipedia → Wikidata. Filmler: Wikipedia → Wikidata.
+        // Hepsi anahtarsız ve proxysiz.
+        async function fetchRecommendPoster(item) {
+            const title = item.title || '';
+            const isTv = (item.type || '').startsWith('tv');
+            let poster = isTv ? await fetchPosterFromTvmaze(title) : '';
+            if (!poster) poster = await fetchPosterFromWikipedia(title, item.year, isTv);
+            if (!poster) poster = await fetchPosterFromWikidata(title, item.year, isTv);
+            return poster;
+        }
+
         // Wikipedia'nın da (iTunes gibi) dakikalık istek sınırı var; her kart için 1-2
         // istek atıldığında (özellikle grid'de aynı anda birçok kart görünür olduğunda)
         // hızla 429 (Too Many Requests) alıyorduk. Bu global sıra, tüm Wikipedia
@@ -1744,24 +1811,31 @@
             let poster = '';
             let anySuccess = false; // en az bir istek gerçekten yanıt aldıysa true (429/ağ hatası değilse)
 
-            // 1) Önce doğrudan başlık eşleşmesi dene: Wikipedia'nın kendi yönlendirme
-            // (redirect) çözümünü kullanır, bu yüzden bilinen başlıklar için arama
-            // tabanlı yöntemden çok daha isabetlidir (yanlış alt sayfaya düşmez).
-            try {
-                const url1 = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(title)}&prop=pageimages&piprop=thumbnail&pithumbsize=600&redirects=1&format=json&origin=*`;
-                const res1 = await scheduleWikiFetch(url1);
-                if (res1.ok) {
-                    anySuccess = true;
-                    const data1 = await res1.json();
-                    const pages1 = data1 && data1.query && data1.query.pages;
-                    if (pages1) {
-                        const page1 = Object.values(pages1)[0];
-                        if (page1 && page1.thumbnail && page1.thumbnail.source) poster = page1.thumbnail.source;
-                    }
-                }
-            } catch (e) { /* devam, arama tabanlı yönteme düş */ }
+            // 1) Önce Wikipedia'nın standart adlandırma kalıplarıyla doğrudan başlık
+            // dene (yönlendirmeleri takip eder). Filmler için "(Yıl film)" kalıbı,
+            // aynı isimli başka bir şeyle (kitap, antik destan vb.) karışmayı önlüyor.
+            const directCandidates = isTv
+                ? [`${title} (TV series)`, title]
+                : [year ? `${title} (${year} film)` : null, `${title} (film)`, title].filter(Boolean);
 
-            // 2) Bulunamadıysa (başlık tam eşleşmediyse) arama tabanlı yedek yöntem.
+            for (const candidate of directCandidates) {
+                if (poster) break;
+                try {
+                    const url1 = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(candidate)}&prop=pageimages&piprop=thumbnail&pithumbsize=600&redirects=1&format=json&origin=*`;
+                    const res1 = await scheduleWikiFetch(url1);
+                    if (res1.ok) {
+                        anySuccess = true;
+                        const data1 = await res1.json();
+                        const pages1 = data1 && data1.query && data1.query.pages;
+                        if (pages1) {
+                            const page1 = Object.values(pages1)[0];
+                            if (page1 && page1.thumbnail && page1.thumbnail.source) poster = page1.thumbnail.source;
+                        }
+                    }
+                } catch (e) { /* sıradaki aday veya arama yöntemine düş */ }
+            }
+
+            // 2) Hiçbiri tutmadıysa arama tabanlı yedek yöntem.
             if (!poster) {
                 try {
                     const bias = isTv ? 'TV series' : 'film';
@@ -1777,7 +1851,7 @@
                             if (page2 && page2.thumbnail && page2.thumbnail.source) poster = page2.thumbnail.source;
                         }
                     }
-                } catch (e) { /* Wikipedia'da bulunamadı, placeholder kalsın */ }
+                } catch (e) { /* Wikipedia'da bulunamadı, Wikidata'ya düşülecek */ }
             }
 
             // Sadece gerçekten başarılı bir yanıt aldıysak (429/ağ hatası değilse) kalıcı
@@ -1785,6 +1859,59 @@
             if (anySuccess) {
                 wikiPosterCacheMem[cacheKey] = poster;
                 writeWikiPosterCache(wikiPosterCacheMem);
+            }
+            return poster;
+        }
+
+        // ---- Wikidata: Wikipedia'da bulunamayanlar için son çare ----
+        // Wikidata, Wikipedia'dan ayrı bir veritabanı; bazı yapımların Wikipedia'da
+        // görseli olmasa/sayfası bulunamasa bile Wikidata'daki yapılandırılmış veri
+        // girişinde "görsel" (P18) özelliği dolu olabiliyor. Anahtarsız, `origin=*` ile
+        // CORS'a açık, Wikipedia'nınkiyle aynı altyapıyı (Wikimedia) kullanıyor.
+        const WIKIDATA_CACHE_KEY = 'wikidataPosterCacheV1';
+        let wikidataCacheMem = readSimpleCache(WIKIDATA_CACHE_KEY);
+        let wikidataQueueTail = Promise.resolve();
+        const WIKIDATA_MIN_INTERVAL_MS = 500;
+        function scheduleWikidataFetch(url) {
+            const run = wikidataQueueTail.then(() => new Promise(resolve => {
+                setTimeout(() => resolve(fetch(url)), WIKIDATA_MIN_INTERVAL_MS);
+            }));
+            wikidataQueueTail = run.catch(() => {});
+            return run;
+        }
+        async function fetchPosterFromWikidata(title, year, isTv) {
+            const cacheKey = `${title}::${year || ''}::${isTv ? 'tv' : 'movie'}`;
+            if (wikidataCacheMem[cacheKey] !== undefined) return wikidataCacheMem[cacheKey];
+
+            let poster = '';
+            let anySuccess = false;
+            try {
+                // 1) İsimden en alakalı Wikidata öğesini bul.
+                const searchUrl = `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(title)}&language=en&type=item&limit=1&format=json&origin=*`;
+                const searchRes = await scheduleWikidataFetch(searchUrl);
+                if (searchRes.ok) {
+                    anySuccess = true;
+                    const searchData = await searchRes.json();
+                    const entity = searchData && searchData.search && searchData.search[0];
+                    if (entity && entity.id) {
+                        // 2) O öğenin P18 (görsel) özelliğini çek.
+                        const claimUrl = `https://www.wikidata.org/w/api.php?action=wbgetclaims&entity=${entity.id}&property=P18&format=json&origin=*`;
+                        const claimRes = await scheduleWikidataFetch(claimUrl);
+                        if (claimRes.ok) {
+                            const claimData = await claimRes.json();
+                            const claims = claimData && claimData.claims && claimData.claims.P18;
+                            const filename = claims && claims[0] && claims[0].mainsnak && claims[0].mainsnak.datavalue && claims[0].mainsnak.datavalue.value;
+                            if (filename) {
+                                poster = `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(filename)}?width=600`;
+                            }
+                        }
+                    }
+                }
+            } catch (e) { /* bulunamadı, placeholder kalsın */ }
+
+            if (anySuccess) {
+                wikidataCacheMem[cacheKey] = poster;
+                writeSimpleCache(WIKIDATA_CACHE_KEY, wikidataCacheMem);
             }
             return poster;
         }
