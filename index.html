@@ -1772,12 +1772,19 @@
         let fanartCacheMem = readSimpleCache(FANART_CACHE_KEY);
         let fanartQueueTail = Promise.resolve();
         const FANART_MIN_INTERVAL_MS = 350;
-        // Varsayılan olarak gömülü Fanart.tv API anahtarı (OMDb/Watchmode anahtarlarıyla aynı mantık).
+        // Varsayılan olarak gömülü Fanart.tv API anahtarları.
+        // Fanart.tv iki tür anahtar kullanır: Project Key (zorunlu, api_key) ve
+        // Personal/Client Key (opsiyonel, client_key — sadece yeni eklenen afişlere
+        // daha hızlı erişim sağlar, project key'in yerine geçmez).
         // Kullanıcı kendi anahtarını girerse (localStorage'a kaydedilir) o öncelikli olur.
-        const DEFAULT_FANART_KEY = '10f634c4f606312b998823a13e1990f9';
+        const DEFAULT_FANART_PROJECT_KEY = '2499db82fe897d4da4faa08020901c78';
+        const DEFAULT_FANART_CLIENT_KEY = '10f634c4f606312b998823a13e1990f9';
 
         function getFanartApiKey() {
-            return localStorage.getItem('fanartApiKey') || DEFAULT_FANART_KEY;
+            return localStorage.getItem('fanartApiKey') || DEFAULT_FANART_PROJECT_KEY;
+        }
+        function getFanartClientKey() {
+            return localStorage.getItem('fanartClientKey') || DEFAULT_FANART_CLIENT_KEY;
         }
 
         function setupFanartApiKeyHint() {
@@ -1796,7 +1803,7 @@
         function promptForFanartApiKey() {
             const current = localStorage.getItem('fanartApiKey') || '';
             const key = window.prompt(
-                "Kendi Fanart.tv API anahtarınızı girmek isterseniz buraya yazın.\n\nÜcretsiz anahtar: https://fanart.tv/get-an-api-key/ (hesap açıp 'Personal API Key' isteyin)\n\n(Boş bırakıp Tamam'a basarsanız varsayılan anahtara döner)",
+                "Kendi Fanart.tv Project API anahtarınızı girmek isterseniz buraya yazın.\n\nÜcretsiz anahtar: https://fanart.tv/get-an-api-key/ ('Project API Key' seçeneğini kullanın; 'Personal API Key' tek başına yeterli değildir)\n\n(Boş bırakıp Tamam'a basarsanız varsayılan anahtara döner)",
                 current
             );
             if (key === null) return;
@@ -1824,7 +1831,10 @@
             let poster = '';
             let anySuccess = false;
             try {
-                const url = `${FANART_BASE}/${encodeURIComponent(imdbId)}?api_key=${encodeURIComponent(apiKey)}`;
+                const apiKeyQ = `api_key=${encodeURIComponent(apiKey)}`;
+                const clientKey = getFanartClientKey();
+                const clientKeyQ = clientKey ? `&client_key=${encodeURIComponent(clientKey)}` : '';
+                const url = `${FANART_BASE}/${encodeURIComponent(imdbId)}?${apiKeyQ}${clientKeyQ}`;
                 const res = await scheduleFanartFetch(url);
                 if (res.ok) {
                     anySuccess = true;
