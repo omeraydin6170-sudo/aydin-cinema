@@ -663,6 +663,7 @@
                 </button>
             </div>
             <div id="rmApiKeyHint" class="api-key-hint"></div>
+            <div id="rmPosterKeyHint" class="api-key-hint"></div>
 
             <div id="recommendGrid" class="recommend-grid"></div>
 
@@ -959,6 +960,7 @@
             renderAccountPanel();
             updateAccountNavIcon();
             setupWatchmodeApiKeyHint();
+            setupPosterProxyHint();
             loadWatchmodeGenres();
         };
 
@@ -1551,6 +1553,60 @@
             setupWatchmodeApiKeyHint();
         }
 
+        // ---- Film afişleri için: kendi Cloudflare Worker'ın üzerinden IMDb suggestion API ----
+        // Afiş verisinin kendisi hâlâ IMDb'nin suggestion API'sinden geliyor (anahtarsız,
+        // limitsiz). Sorun hep tarayıcının buraya DOĞRUDAN erişememesiydi (CORS) — bunun için
+        // paylaşılan/kalabalık genel proxy'lere (allorigins, corsproxy.io) bağımlıydık, onlar
+        // da sık sık tıkanıyordu. Artık kendi ücretsiz Cloudflare Worker'ımız (günde 100.000
+        // istek ücretsiz) varsayılan olarak gömülü; kullanıcı isterse "değiştir" ile kendi
+        // Worker'ının URL'sini girebilir. Worker'a hiç ulaşılamazsa eski genel proxy zincirine
+        // (proxyFetchText) düşülür.
+        const DEFAULT_POSTER_PROXY_URL = 'https://aydin-poster-proxy.omeraydin6170.workers.dev';
+        function getPosterProxyUrl() {
+            const custom = (localStorage.getItem('posterProxyUrl') || '').replace(/\/+$/, '');
+            return custom || DEFAULT_POSTER_PROXY_URL;
+        }
+
+        function setupPosterProxyHint() {
+            const hint = document.getElementById('rmPosterKeyHint');
+            if (!hint) return;
+            const url = getPosterProxyUrl();
+            if (url) {
+                hint.innerHTML = `<span class="dot-on"></span>Film afişleri için kendi proxy'niz aktif · <a href="#" id="rmPosterProxyLink">değiştir</a>`;
+            } else {
+                hint.innerHTML = `Film afişleri şu an paylaşılan genel proxy'leri kullanıyor (sık tıkanabilir) · <a href="#" id="rmPosterProxyLink">kendi Worker'ını gir</a>`;
+            }
+            const link = document.getElementById('rmPosterProxyLink');
+            if (link) link.onclick = (e) => { e.preventDefault(); promptForPosterProxyUrl(); };
+        }
+
+        function promptForPosterProxyUrl() {
+            const current = localStorage.getItem('posterProxyUrl') || '';
+            const url = window.prompt(
+                "Cloudflare Worker URL'nizi girin (örn: https://aydin-poster-proxy.kullaniciadi.workers.dev)\n\n" +
+                "(Boş bırakıp Tamam'a basarsanız kaldırılır, genel proxy zincirine dönülür)",
+                current
+            );
+            if (url === null) return;
+            if (url.trim() === '') localStorage.removeItem('posterProxyUrl');
+            else localStorage.setItem('posterProxyUrl', url.trim());
+            setupPosterProxyHint();
+            loadRecommendations(true);
+        }
+
+        // Kendi Worker'ı varsa onu dener; yoksa ya da başarısız olursa eski genel proxy
+        // zincirine (proxyFetchText) düşer.
+        async function fetchViaOwnOrPublicProxy(targetUrl) {
+            const workerBase = getPosterProxyUrl();
+            if (workerBase) {
+                try {
+                    const res = await fetch(`${workerBase}?url=${encodeURIComponent(targetUrl)}`);
+                    if (res.ok) return await res.text();
+                } catch (e) { /* worker başarısız, genel proxy'ye düş */ }
+            }
+            return await proxyFetchText(targetUrl);
+        }
+
         // Watchmode isteklerini önce doğrudan, olmazsa mevcut CORS proxy zinciri üzerinden dener.
         async function watchmodeFetchJson(path, params) {
             const apiKey = getWatchmodeApiKey();
@@ -1774,7 +1830,7 @@
         const IMDB_SUGGEST_MIN_INTERVAL_MS = 450;
         function scheduleImdbSuggestFetch(url) {
             const run = imdbSuggestQueueTail.then(() => new Promise(resolve => {
-                setTimeout(() => resolve(proxyFetchText(url)), IMDB_SUGGEST_MIN_INTERVAL_MS);
+                setTimeout(() => resolve(fetchViaOwnOrPublicProxy(url)), IMDB_SUGGEST_MIN_INTERVAL_MS);
             }));
             imdbSuggestQueueTail = run.catch(() => {});
             return run;
