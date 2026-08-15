@@ -203,9 +203,33 @@
         }
         input:focus, select:focus { border-color: var(--marquee); box-shadow: 0 0 0 3px rgba(255,183,3,0.12); }
         input::placeholder { color: var(--dim-2); }
-        .tv-controls { display: none; gap: 8px; align-items: flex-end; flex-wrap: wrap; min-width: 0; }
-        .tv-controls .field { flex: 1 1 64px; min-width: 0; max-width: 90px; }
+        .tv-controls { display: none; gap: 10px; align-items: flex-end; flex-wrap: wrap; min-width: 0; }
+        .tv-controls .field { flex: 1 1 auto; min-width: 0; max-width: 150px; }
         .tv-controls input { text-align: center; padding-left: 4px; padding-right: 4px; min-width: 0; width: 100%; }
+        .stepper-row {
+            display: flex; align-items: stretch; gap: 0;
+            border: 1px solid var(--line); border-radius: 9px; overflow: hidden;
+            background: var(--void-2);
+        }
+        .stepper-row input {
+            text-align: center; padding-left: 2px; padding-right: 2px;
+            width: 44px; flex: 0 0 auto; border: none; border-radius: 0;
+            background: transparent; border-left: 1px solid var(--line);
+            border-right: 1px solid var(--line);
+        }
+        .stepper-row input:focus { box-shadow: none; }
+        .stepper-btn {
+            flex: 0 0 auto; width: 34px; height: 46px; min-height: 46px;
+            border-radius: 0; border: none; background: transparent;
+            color: var(--ink); font-size: 1.2rem; font-weight: 700; line-height: 1; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: background 0.15s, color 0.15s;
+        }
+        .stepper-btn:hover { background: var(--panel-raised); color: var(--marquee); }
+        .stepper-btn:active { transform: scale(0.94); }
+        .field.season-info-field { flex: 1 1 100%; max-width: none; justify-content: flex-start; }
+        .season-info-hint { font-family: var(--mono); font-size: 0.72rem; color: var(--dim); padding-bottom: 2px; white-space: normal; }
+        .season-info-hint.ready { color: var(--marquee); }
 
         button { border: none; border-radius: 9px; font-family: var(--body-font); }
         .btn-play {
@@ -613,13 +637,30 @@
                 </div>
                 <div class="field id-field">
                     <label for="mId">IMDb ID</label>
-                    <input type="text" id="mId" placeholder="tt..." oninput="document.getElementById('mPoster').value='';">
+                    <input type="text" id="mId" placeholder="tt..." oninput="document.getElementById('mPoster').value=''; scheduleSeasonInfoRefresh();">
                 </div>
                 <input type="hidden" id="mPoster" value="">
 
                 <div id="tvFields" class="tv-controls">
-                    <div class="field"><label for="season">Sezon</label><input type="number" id="season" value="1" min="1"></div>
-                    <div class="field"><label for="episode">Bölüm</label><input type="number" id="episode" value="1" min="1"></div>
+                    <div class="field">
+                        <label for="season">Sezon</label>
+                        <div class="stepper-row">
+                            <button type="button" class="stepper-btn" onclick="stepEpisode(-1, true)" aria-label="Önceki sezon">−</button>
+                            <input type="number" id="season" value="1" min="1" oninput="refreshSeasonInfo()">
+                            <button type="button" class="stepper-btn" onclick="stepEpisode(1, true)" aria-label="Sonraki sezon">+</button>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label for="episode">Bölüm</label>
+                        <div class="stepper-row">
+                            <button type="button" class="stepper-btn" onclick="stepEpisode(-1, false)" aria-label="Önceki bölüm">−</button>
+                            <input type="number" id="episode" value="1" min="1" oninput="refreshSeasonInfo()">
+                            <button type="button" class="stepper-btn" onclick="stepEpisode(1, false)" aria-label="Sonraki bölüm">+</button>
+                        </div>
+                    </div>
+                    <div class="field season-info-field">
+                        <span id="seasonInfoHint" class="season-info-hint"></span>
+                    </div>
                 </div>
 
                 <button class="btn-play" onclick="loadMedia()"><svg class="icon"><use href="#ic-play"/></svg>İzle</button>
@@ -968,6 +1009,131 @@
         function updateUI() {
             const type = document.getElementById('mType').value;
             document.getElementById('tvFields').style.display = (type === 'tv') ? 'flex' : 'none';
+            scheduleSeasonInfoRefresh();
+        }
+
+        // ---- Sezon/bölüm sınırları: TVmaze'den (anahtarsız, limitsiz) ----
+        // Dizinin IMDb ID'sinden TVmaze'in kendi show ID'sini buluyoruz (lookup uç noktası),
+        // sonra o dizinin TÜM bölüm listesini çekip her sezonda kaç bölüm olduğunu
+        // çıkarıyoruz. +/- butonları bu haritaya göre sezon sınırını otomatik aşıyor.
+        // Sonuç imdb id başına önbelleğe alınıyor (posterCacheV1 ile ortak, tekrar
+        // istek atılmıyor).
+        async function fetchTvmazeEpisodeMap(imdbId) {
+            const cacheKey = `epmap:${imdbId}`;
+            if (posterCacheMem[cacheKey] !== undefined) return posterCacheMem[cacheKey];
+
+            let map = null;
+            try {
+                const lookupRes = await fetch(`https://api.tvmaze.com/lookup/shows?imdb=${encodeURIComponent(imdbId)}`);
+                if (lookupRes.ok) {
+                    const show = await lookupRes.json();
+                    if (show && show.id) {
+                        const epRes = await fetch(`https://api.tvmaze.com/shows/${show.id}/episodes`);
+                        if (epRes.ok) {
+                            const episodes = await epRes.json();
+                            map = {};
+                            (episodes || []).forEach(ep => {
+                                if (!ep.season) return;
+                                map[ep.season] = Math.max(map[ep.season] || 0, ep.number || 0);
+                            });
+                        }
+                    }
+                }
+                // Bulunamadıysa (dizi TVmaze'de yoksa) null olarak önbelleğe al, tekrar tekrar denenmesin
+                posterCacheMem[cacheKey] = map;
+                writePosterCache(posterCacheMem);
+            } catch (e) { /* ağ hatası: önbelleğe yazma, tekrar denensin */ }
+            return map;
+        }
+
+        let seasonInfoRefreshTimer = null;
+        let currentEpisodeMap = null;
+        function scheduleSeasonInfoRefresh() {
+            clearTimeout(seasonInfoRefreshTimer);
+            seasonInfoRefreshTimer = setTimeout(refreshSeasonInfo, 500);
+        }
+
+        // Kutulardaki mevcut sezon/bölüm değerine göre "İzlenecek: X. Sezon, Y. Bölüm"
+        // metnini günceller — yani "Sonraki/Önceki" butonlarına bastığında ya da elle
+        // sayı değiştirdiğinde, İzle'ye basınca gerçekte hangi bölümün açılacağını gösterir.
+        function updateSeasonInfoHintText() {
+            const hint = document.getElementById('seasonInfoHint');
+            if (!hint) return;
+            const season = parseInt(document.getElementById('season').value, 10) || 1;
+            const episode = parseInt(document.getElementById('episode').value, 10) || 1;
+            const map = currentEpisodeMap;
+            const count = map ? map[season] : null;
+
+            let text = `İzlenecek: ${season}. Sezon, ${episode}. Bölüm`;
+            if (count && episode >= count) text += ' (sezon finali)';
+            else if (map === null) text += ' (TVmaze\'de bulunamadı)';
+            hint.textContent = text;
+            hint.classList.add('ready');
+        }
+
+        async function refreshSeasonInfo() {
+            const hint = document.getElementById('seasonInfoHint');
+            const type = document.getElementById('mType').value;
+            const id = document.getElementById('mId').value.trim();
+            currentEpisodeMap = null;
+            if (!hint) return;
+            if (type !== 'tv' || !id) { hint.textContent = ''; hint.classList.remove('ready'); return; }
+
+            hint.textContent = 'sezon bilgisi aranıyor…';
+            hint.classList.remove('ready');
+            const map = await fetchTvmazeEpisodeMap(id);
+            // Kullanıcı bu arada ID'yi değiştirmiş olabilir, hâlâ aynı ID mi kontrol et
+            if (document.getElementById('mId').value.trim() !== id) return;
+            currentEpisodeMap = map;
+            updateSeasonInfoHintText();
+        }
+
+        // "Sonraki"/"Önceki" butonları: isSeason true ise sezon alanını, false ise bölüm
+        // alanını adımlar. Bölüm sınırına ulaşınca otomatik bir sonraki/önceki sezona geçer.
+        async function stepEpisode(delta, isSeason) {
+            const seasonInput = document.getElementById('season');
+            const episodeInput = document.getElementById('episode');
+            let season = parseInt(seasonInput.value, 10) || 1;
+            let episode = parseInt(episodeInput.value, 10) || 1;
+
+            if (isSeason) {
+                season = Math.max(1, season + delta);
+                episode = 1;
+                seasonInput.value = season;
+                episodeInput.value = episode;
+                refreshSeasonInfo();
+                return;
+            }
+
+            // Bölüm haritası henüz gelmediyse (ör. kullanıcı çok hızlı tıkladı) bekle
+            if (currentEpisodeMap === null) {
+                const id = document.getElementById('mId').value.trim();
+                if (id) currentEpisodeMap = await fetchTvmazeEpisodeMap(id);
+            }
+            const map = currentEpisodeMap;
+            const seasonEpisodeCount = map ? map[season] : null;
+
+            if (delta > 0) {
+                if (seasonEpisodeCount && episode >= seasonEpisodeCount) {
+                    // Bu sezonun son bölümündeyiz, sonraki sezona geç
+                    season += 1;
+                    episode = 1;
+                } else {
+                    episode += 1;
+                }
+            } else {
+                if (episode > 1) {
+                    episode -= 1;
+                } else if (season > 1) {
+                    season -= 1;
+                    const prevCount = map ? map[season] : null;
+                    episode = prevCount || 1;
+                }
+            }
+
+            seasonInput.value = season;
+            episodeInput.value = episode;
+            updateSeasonInfoHintText();
         }
 
         async function loadMedia() {
