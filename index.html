@@ -1709,7 +1709,7 @@
         // gerekmiyor, bu yüzden ne Watchmode ne OMDb kotasına dokunuyor. Dezavantajı:
         // bazı (özellikle çok yeni veya az bilinen) yapımlar için sayfa/görsel
         // bulunamayabilir; o durumda placeholder ikon kalır.
-        const WIKI_POSTER_CACHE_KEY = 'wikiPosterCacheV2'; // v2: arama sorgusu iyileştirildi, eski (yanlış negatif) kayıtları geçersiz kılmak için sürüm arttırıldı
+        const WIKI_POSTER_CACHE_KEY = 'wikiPosterCacheV3'; // v3: 429/ağ hatalarını artık kalıcı önbelleğe yazmıyoruz, eski bozuk kayıtları geçersiz kılmak için sürüm arttırıldı
         function readWikiPosterCache() {
             try { return JSON.parse(localStorage.getItem(WIKI_POSTER_CACHE_KEY)) || {}; }
             catch (e) { return {}; }
@@ -1722,19 +1722,36 @@
         }
         let wikiPosterCacheMem = readWikiPosterCache();
 
+        // Wikipedia'nın da (iTunes gibi) dakikalık istek sınırı var; her kart için 1-2
+        // istek atıldığında (özellikle grid'de aynı anda birçok kart görünür olduğunda)
+        // hızla 429 (Too Many Requests) alıyorduk. Bu global sıra, tüm Wikipedia
+        // isteklerini (hem başlık hem arama denemeleri dahil) aralarında yeterli
+        // boşlukla, tek tek gönderir.
+        let wikiQueueTail = Promise.resolve();
+        const WIKI_MIN_INTERVAL_MS = 500;
+        function scheduleWikiFetch(url) {
+            const run = wikiQueueTail.then(() => new Promise(resolve => {
+                setTimeout(() => resolve(fetch(url)), WIKI_MIN_INTERVAL_MS);
+            }));
+            wikiQueueTail = run.catch(() => {});
+            return run;
+        }
+
         async function fetchPosterFromWikipedia(title, year, isTv) {
             const cacheKey = `${title}::${year || ''}::${isTv ? 'tv' : 'movie'}`;
             if (wikiPosterCacheMem[cacheKey] !== undefined) return wikiPosterCacheMem[cacheKey];
 
             let poster = '';
+            let anySuccess = false; // en az bir istek gerçekten yanıt aldıysa true (429/ağ hatası değilse)
 
             // 1) Önce doğrudan başlık eşleşmesi dene: Wikipedia'nın kendi yönlendirme
             // (redirect) çözümünü kullanır, bu yüzden bilinen başlıklar için arama
             // tabanlı yöntemden çok daha isabetlidir (yanlış alt sayfaya düşmez).
             try {
                 const url1 = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(title)}&prop=pageimages&piprop=thumbnail&pithumbsize=600&redirects=1&format=json&origin=*`;
-                const res1 = await fetch(url1);
+                const res1 = await scheduleWikiFetch(url1);
                 if (res1.ok) {
+                    anySuccess = true;
                     const data1 = await res1.json();
                     const pages1 = data1 && data1.query && data1.query.pages;
                     if (pages1) {
@@ -1750,8 +1767,9 @@
                     const bias = isTv ? 'TV series' : 'film';
                     const query = `${title} ${bias}`;
                     const url2 = `https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrlimit=1&prop=pageimages&piprop=thumbnail&pithumbsize=600&format=json&origin=*`;
-                    const res2 = await fetch(url2);
+                    const res2 = await scheduleWikiFetch(url2);
                     if (res2.ok) {
+                        anySuccess = true;
                         const data2 = await res2.json();
                         const pages2 = data2 && data2.query && data2.query.pages;
                         if (pages2) {
@@ -1762,8 +1780,12 @@
                 } catch (e) { /* Wikipedia'da bulunamadı, placeholder kalsın */ }
             }
 
-            wikiPosterCacheMem[cacheKey] = poster;
-            writeWikiPosterCache(wikiPosterCacheMem);
+            // Sadece gerçekten başarılı bir yanıt aldıysak (429/ağ hatası değilse) kalıcı
+            // önbelleğe yazıyoruz; yoksa bir sonraki denemede tekrar şansı olsun.
+            if (anySuccess) {
+                wikiPosterCacheMem[cacheKey] = poster;
+                writeWikiPosterCache(wikiPosterCacheMem);
+            }
             return poster;
         }
 
