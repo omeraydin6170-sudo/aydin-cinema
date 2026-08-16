@@ -1827,14 +1827,23 @@
         }
 
         // Kendi Worker'ı varsa onu dener; yoksa ya da başarısız olursa eski genel proxy
-        // zincirine (proxyFetchText) düşer.
+        // zincirine (proxyFetchText) düşer. Worker'a kısa bir zaman aşımı (3sn) konuyor:
+        // bazı mobil operatörler workers.dev'e bağlantıyı sessizce düşürüyor (hata vermeden
+        // bekletiyor), zaman aşımı olmazsa bu durumda yedek proxy'ye hiç geçilemiyor ve
+        // afişler mobil veride hiç yüklenmiyor.
         async function fetchViaOwnOrPublicProxy(targetUrl) {
             const workerBase = getPosterProxyUrl();
             if (workerBase) {
                 try {
-                    const res = await fetch(`${workerBase}?url=${encodeURIComponent(targetUrl)}`);
-                    if (res.ok) return await res.text();
-                } catch (e) { /* worker başarısız, genel proxy'ye düş */ }
+                    const controller = new AbortController();
+                    const timer = setTimeout(() => controller.abort(), 3000);
+                    try {
+                        const res = await fetch(`${workerBase}?url=${encodeURIComponent(targetUrl)}`, { signal: controller.signal });
+                        if (res.ok) return await res.text();
+                    } finally {
+                        clearTimeout(timer);
+                    }
+                } catch (e) { /* worker başarısız/ulaşılamadı, genel proxy'ye düş */ }
             }
             return await proxyFetchText(targetUrl);
         }
