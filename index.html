@@ -307,6 +307,15 @@
         }
         .poster-card:hover .poster-play { opacity: 1; transform: translate(-50%,-50%) scale(1); }
         .poster-card .poster-play .icon { width: 17px; height: 17px; margin-left: 2px; }
+        .poster-remove-btn {
+            position: absolute; top: 8px; right: 8px; z-index: 3;
+            width: 26px; height: 26px; border-radius: 50%; border: none;
+            background: rgba(10,10,14,0.72); color: #fff; backdrop-filter: blur(4px);
+            display: flex; align-items: center; justify-content: center; cursor: pointer;
+            opacity: 0.8; transition: opacity .15s, background .15s, transform .15s;
+        }
+        .poster-remove-btn .icon { width: 13px; height: 13px; }
+        .poster-remove-btn:hover { opacity: 1; background: var(--hot, #ff5d5d); transform: scale(1.08); }
 
         /* ===== RECOMMENDATIONS (Watchmode) ===== */
         .recommend-controls { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; align-items: center; }
@@ -450,7 +459,14 @@
         }
         .episode-item:hover { background: var(--panel-raised); border-left-color: var(--hot); }
         .episode-item .ep-label { color: var(--ink); font-weight: 600; }
-        .episode-item .ep-date { color: var(--dim); font-size: 0.7rem; font-family: var(--mono); }
+        .episode-item .ep-date { color: var(--dim); font-size: 0.7rem; font-family: var(--mono); margin-left: auto; margin-right: 10px; }
+        .ep-remove-btn {
+            flex: 0 0 auto; width: 30px; height: 30px; border-radius: 8px; border: none;
+            background: transparent; color: var(--dim); display: flex; align-items: center;
+            justify-content: center; cursor: pointer; transition: background .15s, color .15s;
+        }
+        .ep-remove-btn .icon { width: 15px; height: 15px; }
+        .ep-remove-btn:hover { background: rgba(255,93,93,0.15); color: var(--hot, #ff5d5d); }
 
         /* ===== BOTTOM NAV (mobile) ===== */
         .bottom-nav {
@@ -1272,6 +1288,9 @@
             const metaText = isTv ? `S${item.s} · B${item.e}` : (item.date || '').split(' ')[0];
             return `
                 <div class="poster-card" data-group="${groupIdx}" tabindex="0" role="button" aria-label="${escapeHtml(item.name)}">
+                    <button type="button" class="poster-remove-btn" data-remove-group="${groupIdx}" aria-label="Geçmişten kaldır" title="Geçmişten kaldır">
+                        <svg class="icon"><use href="#ic-trash"/></svg>
+                    </button>
                     <div class="poster-img-wrap">
                         ${posterInner}
                         <span class="poster-badge ${isTv ? 'tv' : 'movie'}">${isTv ? 'DİZİ' : 'FİLM'}</span>
@@ -1302,6 +1321,14 @@
 
             track.innerHTML = history.map((item, idx) => posterCardMarkup(item, idx)).join('');
 
+            track.querySelectorAll('.poster-remove-btn').forEach((btn) => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const idx = parseInt(btn.dataset.removeGroup, 10);
+                    removeHistoryItem(idx);
+                });
+            });
+
             track.querySelectorAll('.poster-card').forEach((card) => {
                 const idx = parseInt(card.dataset.group, 10);
                 const item = history[idx];
@@ -1323,6 +1350,18 @@
             });
         }
 
+        // Tek bir içeriği (film ya da bir dizinin tüm bölüm grubunu) geçmişten kaldırır.
+        function removeHistoryItem(idx) {
+            const history = JSON.parse(localStorage.getItem('cinemaHistory')) || [];
+            const item = history[idx];
+            if (!item) return;
+            if (!confirm(`"${item.name}" geçmişten kaldırılsın mı?`)) return;
+            history.splice(idx, 1);
+            localStorage.setItem('cinemaHistory', JSON.stringify(history));
+            renderHistory();
+            syncHistoryToCloud();
+        }
+
         function openEpisodeModal(item, groupIdx) {
             document.getElementById('episodeModalTitle').innerHTML = `<svg class="icon"><use href="#ic-film"/></svg>${escapeHtml(item.name)}`;
             const body = document.getElementById('episodeModalBody');
@@ -1333,8 +1372,13 @@
                 li.innerHTML = `
                     <span class="ep-label">Sezon ${ep.s}, Bölüm ${ep.e}</span>
                     <span class="ep-date">${ep.date}</span>
+                    <button type="button" class="ep-remove-btn" aria-label="Bu bölümü geçmişten kaldır" title="Bu bölümü geçmişten kaldır">
+                        <svg class="icon"><use href="#ic-trash"/></svg>
+                    </button>
                 `;
-                li.onclick = () => {
+                const clickable = li;
+                clickable.addEventListener('click', (e) => {
+                    if (e.target.closest('.ep-remove-btn')) return;
                     document.getElementById('mName').value = item.name;
                     document.getElementById('mType').value = 'tv';
                     document.getElementById('mId').value = item.id;
@@ -1345,10 +1389,32 @@
                     loadMedia();
                     closeOverlay('episodeOverlay');
                     scrollToSection('heroSection');
-                };
+                });
+                li.querySelector('.ep-remove-btn').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    removeHistoryEpisode(groupIdx, ep.s, ep.e, item.name);
+                });
                 body.appendChild(li);
             });
             openOverlay('episodeOverlay');
+        }
+
+        // Bir dizinin tek bir bölümünü geçmişten kaldırır. Grup boş kalırsa (dizinin
+        // hiç izlenmiş bölümü kalmazsa) tüm diziyi de geçmişten siler.
+        function removeHistoryEpisode(groupIdx, season, episode, showName) {
+            if (!confirm(`"${showName}" — Sezon ${season}, Bölüm ${episode} geçmişten kaldırılsın mı?`)) return;
+            const history = JSON.parse(localStorage.getItem('cinemaHistory')) || [];
+            const group = history[groupIdx];
+            if (!group) return;
+            group.episodes = (group.episodes || []).filter(ep => !(ep.s === season && ep.e === episode));
+            if (group.episodes.length === 0) {
+                history.splice(groupIdx, 1);
+                closeOverlay('episodeOverlay');
+            }
+            localStorage.setItem('cinemaHistory', JSON.stringify(history));
+            renderHistory();
+            syncHistoryToCloud();
+            if (group.episodes.length > 0) openEpisodeModal(group, groupIdx);
         }
 
         function clearHistory() {
