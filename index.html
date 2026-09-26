@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>AYDIN CİNEMA | Premium v5.0</title>
+    <title>AYDIN CİNEMA </title>
     <link rel="icon" type="image/png" href="logo.png">
 
     <!-- ===== PWA (iPhone Ana Ekrana Ekleme) ===== -->
@@ -147,6 +147,13 @@
             box-shadow: 0 30px 70px rgba(0,0,0,0.65), 0 0 0 1px rgba(255,183,3,0.04);
         }
         .player-shell iframe { width: 100%; height: 100%; border: none; display: block; }
+        .player-switcher { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:0 0 10px; }
+        .player-switcher-label { color:var(--dim); font:600 .72rem var(--mono); letter-spacing:.08em; text-transform:uppercase; margin-right:4px; }
+        .player-source-btn { border:1px solid var(--line); border-radius:999px; background:var(--panel); color:var(--dim); padding:9px 14px; font-weight:700; transition:color .15s,background .15s,border-color .15s; }
+        .player-source-btn:hover { color:var(--ink); border-color:var(--marquee-dim); }
+        .player-source-btn.active { color:var(--void); background:var(--marquee); border-color:var(--marquee); }
+        .player-switcher-hint { color:var(--dim-2); font-size:.72rem; }
+        @media (max-width:480px) { .player-switcher { gap:6px; } .player-source-btn { padding:8px 11px; font-size:.78rem; } }
         .player-placeholder {
             position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
             gap: 14px; text-align: center; padding: 24px;
@@ -621,8 +628,15 @@
     <div class="page">
         <!-- ================= HERO / PLAYER ================= -->
         <section class="hero" id="heroSection">
-            <div class="eyebrow-line"><span class="dot"></span><span>Gişe Açık · 24 Saat · Premium Access</span></div>
+            <div class="eyebrow-line"><span class="dot"></span><span></span></div>
 
+            <div class="player-switcher" role="group" aria-label="Oynatıcı seç">
+                <span class="player-switcher-label">Oynatıcı:</span>
+                <button type="button" class="player-source-btn active" data-player="vaplayer" aria-pressed="true" onclick="selectPlayer('vaplayer')">Vaplayer</button>
+                <button type="button" class="player-source-btn" data-player="vidcore" aria-pressed="false" onclick="selectPlayer('vidcore')">vidcore.io</button>
+                <button type="button" class="player-source-btn" data-player="mapple" aria-pressed="false" onclick="selectPlayer('mapple')">mapple.fun</button>
+                <span class="player-switcher-hint"> </span>
+            </div>
             <div class="player-shell">
                 <iframe id="cinemaFrame" src="about:blank" allowfullscreen allow="autoplay; encrypted-media"></iframe>
                 <div class="player-placeholder" id="playerPlaceholder">
@@ -1152,6 +1166,62 @@
             updateSeasonInfoHintText();
         }
 
+        let selectedPlayer = 'vaplayer';
+        let loadedMedia = null;
+
+        function selectPlayer(provider) {
+            selectedPlayer = provider;
+            document.querySelectorAll('.player-source-btn').forEach(button => {
+                const active = button.dataset.player === provider;
+                button.classList.toggle('active', active);
+                button.setAttribute('aria-pressed', String(active));
+            });
+            if (loadedMedia) void setPlayerSource(loadedMedia);
+        }
+
+        const imdbToTmdbCache = new Map();
+        async function getTmdbIdFromImdb(imdbId) {
+            if (imdbToTmdbCache.has(imdbId)) return imdbToTmdbCache.get(imdbId);
+            const data = await watchmodeFetchJson('/search/', { search_field: 'imdb_id', search_value: imdbId });
+            const result = (data.title_results || []).find(item => item.imdb_id === imdbId && item.tmdb_id);
+            const tmdbId = result ? String(result.tmdb_id) : '';
+            if (tmdbId) imdbToTmdbCache.set(imdbId, tmdbId);
+            return tmdbId;
+        }
+
+        async function setPlayerSource(media) {
+            const { type, id, s, e } = media;
+            let serviceId = id;
+            if (selectedPlayer !== 'vaplayer') {
+                try { serviceId = await getTmdbIdFromImdb(id); }
+                catch (error) {
+                    alert(error.noKey ? 'TMDB ID’ye çevirmek için Watchmode API anahtarı gerekiyor.' : 'IMDb ID’den TMDB ID alınamadı. Ağ bağlantısını ve Watchmode API anahtarını kontrol edin.');
+                    return false;
+                }
+                if (!serviceId) {
+                    alert('Bu IMDb ID için TMDB eşleşmesi bulunamadı.');
+                    return false;
+                }
+            }
+            let url = '';
+            if (selectedPlayer === 'vidcore') {
+                url = type === 'movie'
+                    ? `https://vidcore.io/movie/${encodeURIComponent(serviceId)}`
+                    : `https://vidcore.io/tv/${encodeURIComponent(serviceId)}/${encodeURIComponent(s)}/${encodeURIComponent(e)}`;
+            } else if (selectedPlayer === 'mapple') {
+                url = type === 'movie'
+                    ? `https://mapple.fun/watch/movie/${encodeURIComponent(serviceId)}`
+                    : `https://mapple.fun/watch/tv/${encodeURIComponent(serviceId)}-${encodeURIComponent(s)}-${encodeURIComponent(e)}`;
+            } else {
+                url = type === 'movie'
+                    ? `https://vaplayer.ru/embed/movie/${encodeURIComponent(serviceId)}`
+                    : `https://vaplayer.ru/embed/tv/${encodeURIComponent(serviceId)}/S${String(s).padStart(2, '0')}E${String(e).padStart(2, '0')}`;
+                url += '?primaryColor=%23ffb703';
+            }
+            document.getElementById('cinemaFrame').src = url;
+            return true;
+        }
+
         async function loadMedia() {
             const name = document.getElementById('mName').value.trim() || "İsimsiz İçerik";
             const type = document.getElementById('mType').value;
@@ -1163,14 +1233,8 @@
             if (!id) { alert("Lütfen IMDb ID girin."); return; }
 
             // Oynatmayı hemen başlat, poster çözümlemesi izlemeyi bekletmesin
-            let finalUrl = "";
-            if (type === 'movie') {
-                finalUrl = `https://vaplayer.ru/embed/movie/${id}`;
-            } else {
-                let sPad = s.padStart(2, '0'), ePad = e.padStart(2, '0');
-                finalUrl = `https://vaplayer.ru/embed/tv/${id}/S${sPad}E${ePad}`;
-            }
-            player.src = finalUrl + "?primaryColor=%23ffb703";
+            loadedMedia = { type, id, s, e };
+            if (!await setPlayerSource(loadedMedia)) return;
             updatePlayerInfoBar(name, type, s, e);
 
             let poster = document.getElementById('mPoster').value || '';
@@ -1827,23 +1891,14 @@
         }
 
         // Kendi Worker'ı varsa onu dener; yoksa ya da başarısız olursa eski genel proxy
-        // zincirine (proxyFetchText) düşer. Worker'a kısa bir zaman aşımı (3sn) konuyor:
-        // bazı mobil operatörler workers.dev'e bağlantıyı sessizce düşürüyor (hata vermeden
-        // bekletiyor), zaman aşımı olmazsa bu durumda yedek proxy'ye hiç geçilemiyor ve
-        // afişler mobil veride hiç yüklenmiyor.
+        // zincirine (proxyFetchText) düşer.
         async function fetchViaOwnOrPublicProxy(targetUrl) {
             const workerBase = getPosterProxyUrl();
             if (workerBase) {
                 try {
-                    const controller = new AbortController();
-                    const timer = setTimeout(() => controller.abort(), 3000);
-                    try {
-                        const res = await fetch(`${workerBase}?url=${encodeURIComponent(targetUrl)}`, { signal: controller.signal });
-                        if (res.ok) return await res.text();
-                    } finally {
-                        clearTimeout(timer);
-                    }
-                } catch (e) { /* worker başarısız/ulaşılamadı, genel proxy'ye düş */ }
+                    const res = await fetch(`${workerBase}?url=${encodeURIComponent(targetUrl)}`);
+                    if (res.ok) return await res.text();
+                } catch (e) { /* worker başarısız, genel proxy'ye düş */ }
             }
             return await proxyFetchText(targetUrl);
         }
@@ -2204,3 +2259,12 @@
     </script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
